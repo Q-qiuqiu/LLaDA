@@ -6,9 +6,12 @@ from transformers import AutoTokenizer, AutoModel
 
 def chat():
     device = 'cuda'
-    model = AutoModel.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True, torch_dtype=torch.bfloat16).to(device).eval()
-    tokenizer = AutoTokenizer.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True)
-
+    model_path = '/home/yzx/models_weight/LLaDA/'
+    #model = AutoModel.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True, torch_dtype=torch.bfloat16).to(device).eval()
+    #tokenizer = AutoTokenizer.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True)
+    
+    model = AutoModel.from_pretrained(model_path, trust_remote_code=True, torch_dtype=torch.bfloat16).to(device).eval()
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     gen_length = 128
     steps = 128
     print('*' * 66)
@@ -29,10 +32,16 @@ def chat():
         else:
             prompt = torch.cat([prompt, input_ids[:, 1:]], dim=1)
 
-        out = generate(model, prompt, steps=steps, gen_length=gen_length, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence')
+        # Clear the output file at the beginning of each generation
+        with open("generation_process.txt", 'w', encoding='utf-8') as f:
+            f.write(f"Question: {user_input}\n")
+            f.write('=' * 50 + '\n')
+        
+        out = generate(model, prompt, steps=steps, gen_length=gen_length, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence', save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log.txt")
 
         answer = tokenizer.batch_decode(out[:, prompt.shape[1]:], skip_special_tokens=True)[0]
-        print(f"Bot's reply: {answer}")
+        print(f"Final Bot's reply: {answer}")
+        print(f"Denoise log saved to denoise_log.txt")
 
         # remove the <EOS>
         prompt = out[out != 126081].unsqueeze(0)

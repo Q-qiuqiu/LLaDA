@@ -1,0 +1,333 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLaDA 去噪过程可视化</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        select {
+            padding: 8px;
+            margin: 0 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        .step-display {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+            min-height: 100px;
+        }
+        .step-info {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        .step-result {
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            line-height: 1.5;
+        }
+        .progress-container {
+            margin: 20px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s ease;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 20px;
+        }
+        .blocks-container {
+            margin-top: 20px;
+        }
+        .block-selector {
+            margin: 10px 0;
+        }
+        .block-btn {
+            margin: 5px;
+            padding: 5px 10px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .block-btn.active {
+            background-color: #28a745;
+        }
+        .block-btn.current {
+            background-color: #ffc107;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LLaDA 去噪过程可视化</h1>
+        
+        <div class="controls">
+            <button id="prevBtn" onclick="showPrevStep()" disabled>上一步</button>
+            <button id="nextBtn" onclick="showNextStep()">下一步</button>
+            <button id="autoPlayBtn" onclick="toggleAutoPlay()">自动播放</button>
+            <button id="refreshBtn" onclick="loadData()">刷新数据</button>
+            <select id="speedSelect">
+                <option value="500">快速(0.5秒)</option>
+                <option value="1000" selected>中速(1秒)</option>
+                <option value="2000">慢速(2秒)</option>
+                <option value="3000">很慢(3秒)</option>
+            </select>
+            <span id="currentStep">第 0 步 / 0 步</span>
+        </div>
+        
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+        </div>
+        
+        <div class="blocks-container" id="blocksContainer" style="display:none;">
+            <div class="block-selector">块选择:</div>
+            <div id="blockButtons"></div>
+        </div>
+        
+        <div class="step-display">
+            <div class="step-info" id="stepInfo">请先加载数据...</div>
+            <div class="step-result" id="stepResult"></div>
+        </div>
+    </div>
+
+    <script>
+        let steps = [];
+        let currentStepIndex = 0;
+        let autoPlayInterval = null;
+        let autoPlaySpeed = 1000; // 毫秒
+        let blocks = [];
+
+        // 加载数据
+        async function loadData() {
+            try {
+                document.getElementById('stepResult').textContent = '加载中...';
+                
+                const response = await fetch('/api/steps');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                steps = await response.json();
+                
+                if (steps.length === 0) {
+                    document.getElementById('stepResult').textContent = '暂无数据，请检查 denoise_log.txt 文件';
+                    document.getElementById('stepInfo').textContent = '无数据';
+                    updateControls();
+                    return;
+                }
+                
+                // 获取所有唯一的块
+                blocks = [...new Set(steps.map(step => step.block))];
+                
+                currentStepIndex = 0;
+                displayCurrentStep();
+                updateBlocksDisplay();
+                updateControls();
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                document.getElementById('stepResult').textContent = `加载失败: ${error.message}`;
+                document.getElementById('stepInfo').textContent = '错误';
+            }
+        }
+
+        // 显示当前步骤
+        function displayCurrentStep() {
+            if (steps.length === 0) return;
+            
+            const step = steps[currentStepIndex];
+            
+            // 更新进度信息
+            document.getElementById('stepInfo').innerHTML = 
+                `步骤 ${step.stepNum}/${step.totalSteps} (块 ${step.block}), 已转移 token 数: ${step.transferredTokens}`;
+            
+            // 更新结果内容
+            document.getElementById('stepResult').textContent = step.result || '无结果';
+            
+            // 更新进度条
+            const progressPercent = ((currentStepIndex + 1) / steps.length) * 100;
+            document.getElementById('progressFill').style.width = `${progressPercent}%`;
+            
+            // 更新步骤计数器
+            document.getElementById('currentStep').textContent = 
+                `第 ${currentStepIndex + 1} 步 / ${steps.length} 步`;
+            
+            updateBlocksDisplay(); // 更新块按钮状态
+            updateControls();
+        }
+
+        // 更新块显示
+        function updateBlocksDisplay() {
+            if (blocks.length === 0) {
+                document.getElementById('blocksContainer').style.display = 'none';
+                return;
+            }
+            
+            document.getElementById('blocksContainer').style.display = 'block';
+            const container = document.getElementById('blockButtons');
+            container.innerHTML = '';
+            
+            blocks.forEach(block => {
+                const btn = document.createElement('button');
+                btn.className = 'block-btn';
+                btn.textContent = `块${block}`;
+                btn.onclick = () => goToBlock(block);
+                
+                // 检查当前步骤是否属于此块
+                if (steps[currentStepIndex] && steps[currentStepIndex].block === block) {
+                    btn.classList.add('current');
+                    
+                    // 如果这是当前显示的步骤所属的块，则高亮
+                    if (currentStepIndex < steps.length) {
+                        btn.classList.add('active');
+                    }
+                } else {
+                    btn.classList.remove('current', 'active');
+                }
+                
+                container.appendChild(btn);
+            });
+        }
+
+        // 跳转到指定块的第一个步骤
+        function goToBlock(blockNum) {
+            // 找到指定块的第一个步骤索引
+            const firstIndex = steps.findIndex(step => step.block === blockNum);
+            if (firstIndex !== -1) {
+                currentStepIndex = firstIndex;
+                displayCurrentStep();
+            }
+        }
+
+        // 上一步
+        function showPrevStep() {
+            if (currentStepIndex > 0) {
+                currentStepIndex--;
+                displayCurrentStep();
+            }
+        }
+
+        // 下一步
+        function showNextStep() {
+            if (currentStepIndex < steps.length - 1) {
+                currentStepIndex++;
+                displayCurrentStep();
+            }
+        }
+
+        // 自动播放控制
+        function toggleAutoPlay() {
+            const btn = document.getElementById('autoPlayBtn');
+            const speedSelect = document.getElementById('speedSelect');
+            
+            if (autoPlayInterval) {
+                // 停止自动播放
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+                btn.textContent = '自动播放';
+            } else {
+                // 开始自动播放
+                btn.textContent = '停止播放';
+                autoPlaySpeed = parseInt(speedSelect.value);
+                autoPlayInterval = setInterval(() => {
+                    if (currentStepIndex < steps.length - 1) {
+                        currentStepIndex++;
+                        displayCurrentStep();
+                    } else {
+                        // 到达最后一步时停止
+                        clearInterval(autoPlayInterval);
+                        autoPlayInterval = null;
+                        btn.textContent = '自动播放';
+                    }
+                }, autoPlaySpeed);
+            }
+        }
+
+        // 更新控件状态
+        function updateControls() {
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            prevBtn.disabled = currentStepIndex === 0 || steps.length === 0;
+            nextBtn.disabled = currentStepIndex >= steps.length - 1 || steps.length === 0;
+        }
+
+        // 页面加载完成后自动加载数据
+        window.onload = function() {
+            loadData();
+            
+            // 监听速度选择变化
+            document.getElementById('speedSelect').addEventListener('change', function() {
+                if (autoPlayInterval) {
+                    // 如果正在自动播放，重启它以使用新速度
+                    clearInterval(autoPlayInterval);
+                    toggleAutoPlay();
+                }
+            });
+        };
+    </script>
+</body>
+</html>
