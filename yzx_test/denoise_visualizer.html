@@ -12,6 +12,19 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
+        /* 已确定 token（绿色） */
+        .token {
+            color: #2e7d32;        /* 深绿色 */
+            padding: 0 2px;
+            border-radius: 2px;
+            font-weight: bold;
+        }
+
+        /* MASK（黑色，略淡） */
+        .mask {
+            color: #000000;
+            font-weight: 500;
+        }
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -117,6 +130,7 @@
             background-color: #ffc107;
             color: black;
         }
+        
     </style>
 </head>
 <body>
@@ -161,6 +175,27 @@
         let autoPlaySpeed = 1000; // 毫秒
         let blocks = [];
 
+        function renderWithMaskHighlight(text) {
+            if (!text) return '';
+
+            // 先 escape HTML，防止意外标签
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // 把 <MASK> 替换成黑色 span
+            return escaped.replace(/&lt;MASK&gt;/g, '<span class="mask">&lt;MASK&gt;</span>')
+                        // 其他内容整体包一层绿色（用分段方式）
+                        .split(/(<span class="mask">.*?<\/span>)/g)
+                        .map(part => {
+                            if (part.startsWith('<span class="mask">')) {
+                                return part;
+                            }
+                            return `<span class="token">${part}</span>`;
+                        })
+                        .join('');
+        }
         // 加载数据
         async function loadData() {
             try {
@@ -205,8 +240,9 @@
                 `步骤 ${step.stepNum}/${step.totalSteps} (块 ${step.block}), 已转移 token 数: ${step.transferredTokens}`;
             
             // 更新结果内容
-            document.getElementById('stepResult').textContent = step.result || '无结果';
-            
+            //document.getElementById('stepResult').textContent = step.result || '无结果';
+            document.getElementById('stepResult').innerHTML = renderWithMaskHighlight(step.result || '无结果');
+
             // 更新进度条
             const progressPercent = ((currentStepIndex + 1) / steps.length) * 100;
             document.getElementById('progressFill').style.width = `${progressPercent}%`;
