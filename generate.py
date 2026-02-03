@@ -122,12 +122,37 @@ def generate(model, prompt, attention_mask=None, steps=128, gen_length=128, bloc
             x[transfer_index] = x0[transfer_index]
             
             # Save intermediate result to file if requested
+
             if save_intermediate and tokenizer is not None:
-                intermediate_text = tokenizer.decode(x[0, prompt.shape[1]:], skip_special_tokens=False)
-                with open(output_file, 'a', encoding='utf-8') as f:
-                    f.write(f'Step {i+1}/{steps} (Block {num_block+1}), Transferred tokens: {transfer_index.sum().item()}\n')
-                    f.write(f'result: {intermediate_text.strip()}\n')
-                    f.write('-' * 50 + '\n')
+                ids = x[0, prompt.shape[1]:].detach().tolist()  # 生成部分 token ids（在GPU也行，tolist会拷到CPU）
+                parts = []
+                buf = []
+
+                for tid in ids:
+                    if tid == mask_id:
+                        # 先把之前累计的“已确定段”解码
+                        if buf:
+                            txt = tokenizer.decode(buf, skip_special_tokens=False)
+                            # 防止控制字符污染日志（可选但建议）
+                            txt = txt.replace("\x00", "")
+                            parts.append(txt)
+                            buf = []
+                        parts.append("<MASK>")
+                    else:
+                        buf.append(tid)
+
+                # 收尾
+                if buf:
+                    txt = tokenizer.decode(buf, skip_special_tokens=False)
+                    txt = txt.replace("\x00", "")
+                    parts.append(txt)
+
+                intermediate_text = "".join(parts)
+
+                with open(output_file, "a", encoding="utf-8") as f:
+                    f.write(f"Block {num_block+1} Step {i+1}/{steps} transferred={int(transfer_index[0].sum().item())}\n")
+                    f.write(intermediate_text + "\n")
+                    f.write("-" * 50 + "\n")
 
     return x
 
@@ -376,7 +401,7 @@ def main():
     input_ids = encoded_outputs['input_ids'].to(device)
     attention_mask = encoded_outputs['attention_mask'].to(device)
 
-    out = generate(model, input_ids, attention_mask, steps=16, gen_length=128, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log.txt")
+    out = generate(model, input_ids, attention_mask, steps=128, gen_length=128, block_length=128, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log_128_128_128.txt")
     output = tokenizer.batch_decode(out[:, input_ids.shape[1]:], skip_special_tokens=True)
     for o in output:
         print(o)

@@ -1,0 +1,657 @@
+Block 1 Step 1/16 transferred=2
+{
+<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 2/16 transferred=2
+{
+    "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 3/16 transferred=2
+{
+    "name<MASK><MASK><MASK>_n<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 4/16 transferred=2
+{
+    "name": "<MASK>_n<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 5/16 transferred=2
+{
+    "name": "<MASK>_nearby<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 6/16 transferred=2
+{
+    "name": "find_nearby<MASK><MASK>",<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 7/16 transferred=2
+{
+    "name": "find_nearby<MASK><MASK>",
+   <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 8/16 transferred=2
+{
+    "name": "find_nearby<MASK><MASK>",
+    "<MASK>":<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 9/16 transferred=2
+{
+    "name": "find_nearby<MASK>places",
+    "<MASK>":<MASK>
+<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 10/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "<MASK>":<MASK>
+<MASK> "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 11/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "<MASK>": {
+<MASK> "latitude<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 12/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+<MASK> "latitude":<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 13/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude":<MASK><MASK><MASK>.<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 14/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": <MASK>9.<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 15/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 1 Step 16/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.904<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 1/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042<MASK><MASK><MASK><MASK><MASK>":<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 2/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,<MASK><MASK> "<MASK>":<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 3/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "<MASK>":<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 4/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude":<MASK><MASK>1<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 5/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude":<MASK>116<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 6/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 7/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,<MASK>       <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 8/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,
+        "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 9/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,
+        "<MASK>": <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 10/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,
+        "radius": <MASK><MASK>0<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 11/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,
+        "radius": <MASK>000<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 12/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,
+        "radius": 1000,<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 13/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,
+        "radius": 1000,<MASK>        "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 14/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.<MASK><MASK><MASK><MASK>,
+        "radius": 1000,
+        "categories<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 15/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.40<MASK><MASK>,
+        "radius": 1000,
+        "categories<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 2 Step 16/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 1/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 2/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amen<MASK>",<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 3/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 4/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop",<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 5/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "<MASK>ourism<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 6/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism<MASK><MASK><MASK><MASK>limit<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 7/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+<MASK><MASK>limit<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 8/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 9/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 10/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": <MASK><MASK>
+   <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 11/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": <MASK>0
+   <MASK>
+<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 12/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": <MASK>0
+    }
+}<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 13/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": <MASK>0
+    }
+}
+
+<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 14/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": <MASK>0
+    }
+}
+
+<MASK><MASK>    "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 15/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": <MASK>0
+    }
+}
+
+{
+    "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 3 Step 16/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 4 Step 1/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK>
+--------------------------------------------------
+Block 4 Step 2/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "<MASK><MASK><MASK><MASK><MASK>   <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 3/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "<MASK><MASK><MASK>",
+   <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 4/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "<MASK><MASK><MASK>",
+    "arguments<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 5/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "<MASK><MASK><MASK>",
+    "arguments": {<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 6/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "<MASK><MASK><MASK>",
+    "arguments": {
+       <MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 7/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "<MASK><MASK>_address",
+    "arguments": {
+        "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 8/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 9/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address":<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|endoftext|>
+--------------------------------------------------
+Block 4 Step 10/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address": "<MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><MASK><|eot_id|><|endoftext|>
+--------------------------------------------------
+Block 4 Step 11/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address": "<MASK><MASK><MASK><MASK><MASK><MASK>"<MASK><MASK><MASK>
+<MASK><|eot_id|><|endoftext|>
+--------------------------------------------------
+Block 4 Step 12/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address": "<MASK><MASK><MASK><MASK><MASK><MASK>"
+   <MASK>
+<MASK><|eot_id|><|endoftext|>
+--------------------------------------------------
+Block 4 Step 13/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address": "<MASK><MASK><MASK><MASK><MASK><MASK>"
+    }
+}<|eot_id|><|endoftext|>
+--------------------------------------------------
+Block 4 Step 14/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address": "<MASK><MASK> City<MASK> Forbidden<MASK>"
+    }
+}<|eot_id|><|endoftext|>
+--------------------------------------------------
+Block 4 Step 15/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address": "<MASK><MASK> City, Forbidden City"
+    }
+}<|eot_id|><|endoftext|>
+--------------------------------------------------
+Block 4 Step 16/16 transferred=2
+{
+    "name": "find_nearby_places",
+    "arguments": {
+        "latitude": 39.9042,
+        "longitude": 116.4074,
+        "radius": 1000,
+        "categories": ["amenity", "shop", "tourism"],
+        "limit": 20
+    }
+}
+
+{
+    "name": "geocode_address",
+    "arguments": {
+        "address": "Forbidden City, Forbidden City"
+    }
+}<|eot_id|><|endoftext|>
+--------------------------------------------------

@@ -25,10 +25,12 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
         
+        file_name='/home/yzx/LLaDA/denoise_log_128_128_128.txt'
+
         if parsed_path.path == '/denoise_log.txt':
             # 返回日志文件内容
             try:
-                with open('/home/yzx/LLaDA/denoise_log.txt', 'r', encoding='utf-8') as f:
+                with open(file_name, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
                 self.send_response(200)
@@ -43,7 +45,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif parsed_path.path == '/api/steps':
             # 返回解析后的步骤数据
             try:
-                with open('/home/yzx/LLaDA/denoise_log.txt', 'r', encoding='utf-8') as f:
+                with open(file_name, 'r', encoding='utf-8') as f:
                     log_content = f.read()
                 
                 # 解析日志内容
@@ -77,56 +79,69 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
     
     def parse_log_content(self, content):
-        """解析日志内容为步骤数组"""
+        """解析日志内容为步骤数组（兼容：Block X Step i/j transferred=k 的格式）"""
         steps = []
-        lines = content.split('\n')
+        lines = content.splitlines()
+
         current_step = None
-        collecting_result = False
         result_lines = []
-        
-        for line in lines:
-            line = line.strip()
-            
-            # 匹配步骤信息
-            if line.startswith('Step'):
-                # 如果已经有当前步骤，保存它
-                if current_step is not None:
-                    # 保存收集的结果
-                    if result_lines:
-                        current_step['result'] = ' '.join(result_lines)
-                        result_lines = []
-                    steps.append(current_step)
-                
-                # 解析步骤信息
-                step_match = re.match(r'Step (\d+)/(\d+) \(Block (\d+)\), Transferred tokens: (\d+)', line)
-                if step_match:
-                    current_step = {
-                        'stepNum': int(step_match.group(1)),
-                        'totalSteps': int(step_match.group(2)),
-                        'block': int(step_match.group(3)),
-                        'transferredTokens': int(step_match.group(4)),
-                        'result': ''
-                    }
-                    collecting_result = False
-            # 匹配结果开始
-            elif line.startswith('result:') and current_step:
-                # 提取结果内容
-                result = line[len('result:'):].strip()
-                result_lines = [result]
-                collecting_result = True
-            # 收集结果的后续行
-            elif collecting_result and current_step:
-                # 只收集非空行，跳过分隔符
-                if line and not line.startswith('---'):
-                    result_lines.append(line)
-        
-        # 如果还有未保存的步骤，保存它
-        if current_step and current_step.get('result'):
+
+        # 兼容新格式：Block 1 Step 1/8 transferred=4
+        new_header = re.compile(r'^Block\s+(\d+)\s+Step\s+(\d+)/(\d+)\s+transferred=(\d+)\s*$')
+        # 兼容旧格式：Step 1/8 (Block 1), Transferred tokens: 4
+        old_header = re.compile(r'^Step\s+(\d+)/(\d+)\s+\(Block\s+(\d+)\),\s+Transferred tokens:\s+(\d+)\s*$')
+
+        def flush_current():
+            nonlocal current_step, result_lines
+            if current_step is None:
+                return
+            # 保留换行更适合展示（HTML 里用 pre-wrap）
+            current_step['result'] = "\n".join(result_lines).rstrip()
             steps.append(current_step)
-        
-        # 按步骤号排序
+            current_step = None
+            result_lines = []
+
+        for raw_line in lines:
+            line = raw_line.rstrip("\n")
+            s = line.strip()
+
+            # 分隔线：不作为内容写入
+            if s.startswith('---') and set(s) <= set('-'):
+                continue
+
+            m = new_header.match(s)
+            if m:
+                flush_current()
+                current_step = {
+                    'stepNum': int(m.group(2)),
+                    'totalSteps': int(m.group(3)),
+                    'block': int(m.group(1)),
+                    'transferredTokens': int(m.group(4)),
+                    'result': ''
+                }
+                continue
+
+            m = old_header.match(s)
+            if m:
+                flush_current()
+                current_step = {
+                    'stepNum': int(m.group(1)),
+                    'totalSteps': int(m.group(2)),
+                    'block': int(m.group(3)),
+                    'transferredTokens': int(m.group(4)),
+                    'result': ''
+                }
+                continue
+
+            # 如果已经进入某个 step，就把后续行当作结果内容
+            if current_step is not None:
+                result_lines.append(line)
+
+        # 别忘了最后一个 step
+        flush_current()
+
+        # 按 block + step 排序（你原来就这么做）
         steps.sort(key=lambda x: (x['block'], x['stepNum']))
-        
         return steps
 
 
