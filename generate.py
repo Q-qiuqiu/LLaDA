@@ -76,6 +76,7 @@ def generate(model, prompt, attention_mask=None, steps=128, gen_length=128, bloc
     steps = steps // num_blocks
 
     for num_block in range(num_blocks):
+
         block_mask_index = (x[:, prompt.shape[1] + num_block * block_length: prompt.shape[1] + (num_block + 1) * block_length:] == mask_id)
         num_transfer_tokens = get_num_transfer_tokens(block_mask_index, steps)
         for i in range(steps):
@@ -111,6 +112,7 @@ def generate(model, prompt, attention_mask=None, steps=128, gen_length=128, bloc
                 raise NotImplementedError(remasking)
 
             x0_p[:, prompt.shape[1] + (num_block + 1) * block_length:] = -np.inf
+            
 
             x0 = torch.where(mask_index, x0, x)
             confidence = torch.where(mask_index, x0_p, -np.inf)
@@ -401,7 +403,7 @@ def main():
     input_ids = encoded_outputs['input_ids'].to(device)
     attention_mask = encoded_outputs['attention_mask'].to(device)
 
-    out = generate(model, input_ids, attention_mask, steps=128, gen_length=128, block_length=128, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log_128_128_128.txt")
+    out = generate(model, input_ids, attention_mask, steps=128, gen_length=128, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log_128_128_128.txt")
     output = tokenizer.batch_decode(out[:, input_ids.shape[1]:], skip_special_tokens=True)
     for o in output:
         print(o)

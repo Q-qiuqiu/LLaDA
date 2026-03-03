@@ -25,7 +25,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
         
-        file_name='/home/yzx/LLaDA/denoise_log_128_128_128.txt'
+        file_name='/home/yzx/LLaDA/yzx_test/denoise_log_128_128_128.txt'
 
         if parsed_path.path == '/denoise_log.txt':
             # 返回日志文件内容
