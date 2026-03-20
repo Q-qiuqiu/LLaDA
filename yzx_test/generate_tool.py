@@ -256,7 +256,7 @@ def generate_think_then_tool_but_decode_tool_first(
 def main():
     device = "cuda"
 
-    model_path = "/home/yzx/models_weight/LLaDA/"
+    model_path = "/data/labshare/Param/llada/"
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True, torch_dtype=torch.bfloat16).to(device).eval()
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     if tokenizer.padding_side != "left":
