@@ -301,6 +301,67 @@ def format_token_labels(tokenizer, token_ids):
     return labels
 
 
+def categorize_token(token_text):
+    stripped = token_text.strip()
+    if not stripped:
+        return "special"
+    if token_text.startswith("<") and token_text.endswith(">"):
+        return "special"
+    if all(not ch.isalnum() for ch in stripped):
+        return "punct"
+    return "lexical"
+
+
+def save_attention_summary(
+    attention_matrix,
+    token_ids,
+    token_labels,
+    output_path,
+    layer_idx,
+    prompt_length,
+    top_k=10,
+):
+    attention_matrix = np.asarray(attention_matrix, dtype=np.float64)
+    response_attention = attention_matrix[prompt_length:, prompt_length:]
+    response_token_ids = token_ids[prompt_length:]
+    response_token_labels = token_labels[prompt_length:]
+
+    if response_attention.size == 0 or len(response_token_ids) == 0:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(f"layer={layer_idx}\n")
+            f.write("no response tokens\n")
+        return
+
+    mean_scores = response_attention.mean(axis=0)
+    top_k = min(top_k, len(mean_scores))
+    top_indices = np.argsort(mean_scores)[::-1][:top_k]
+
+    type_scores = {"punct": 0.0, "special": 0.0, "lexical": 0.0}
+    total_score = float(mean_scores.sum())
+    if total_score > 0:
+        for idx, score in enumerate(mean_scores):
+            token_type = categorize_token(response_token_labels[idx])
+            type_scores[token_type] += float(score)
+        for key in type_scores:
+            type_scores[key] /= total_score
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(f"layer={layer_idx}\n")
+        for rank, idx in enumerate(top_indices, start=1):
+            f.write(
+                f"top{rank}: idx={idx} token={response_token_labels[idx]!r} "
+                f"token_id={response_token_ids[idx]} score={mean_scores[idx]:.6f}\n"
+            )
+        f.write("type_distribution:\n")
+        f.write(
+            "punct={:.2f}, special={:.2f}, lexical={:.2f}\n".format(
+                type_scores["punct"],
+                type_scores["special"],
+                type_scores["lexical"],
+            )
+        )
+
+
 def plot_attention_heatmap(
     attention_matrix,
     token_labels,
@@ -346,6 +407,7 @@ def save_manual_attention_heatmaps(
     output_dir,
     prefix="sample",
     max_tokens=80,
+    summary_top_k=10,
 ):
     extractor = ManualAttentionExtractor(model)
     output_dir = Path(output_dir)
@@ -366,6 +428,15 @@ def save_manual_attention_heatmaps(
             attention_mask=attention_mask,
         )
         np.save(output_dir / f"{prefix}_layer_{layer_idx}_attention.npy", attn_matrix)
+        save_attention_summary(
+            attention_matrix=attn_matrix,
+            token_ids=token_ids,
+            token_labels=token_labels,
+            output_path=output_dir / f"{prefix}_layer_{layer_idx}_attention.txt",
+            layer_idx=layer_idx,
+            prompt_length=prompt_length,
+            top_k=summary_top_k,
+        )
         plot_attention_heatmap(
             attention_matrix=attn_matrix,
             token_labels=token_labels,
@@ -389,6 +460,7 @@ def parse_args():
     parser.add_argument("--cfg-scale", type=float, default=0.0)
     parser.add_argument("--layers", type=int, nargs="+", default=[0, 1, 2, 3])
     parser.add_argument("--max-plot-tokens", type=int, default=512)
+    parser.add_argument("--summary-top-k", type=int, default=100)
     parser.add_argument(
         "--heatmap-dir",
         type=str,
@@ -535,6 +607,7 @@ def main():
         output_dir=args.heatmap_dir,
         prefix="generated",
         max_tokens=args.max_plot_tokens,
+        summary_top_k=args.summary_top_k,
     )
 
 
