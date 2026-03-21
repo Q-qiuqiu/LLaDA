@@ -52,7 +52,6 @@ class ManualAttentionExtractor:
     """
 
     def __init__(self, model):
-        self.model = model
         self.base_model, self.blocks = self._resolve_backbone(model)
         self.config = self.base_model.config
         self.num_layers = len(self.blocks)
@@ -159,6 +158,15 @@ class ManualAttentionExtractor:
         attn_weights = self.compute_attention_weights(q, k, attention_mask=attention_mask)
         return attn_weights.mean(dim=1).squeeze(0).float().cpu().numpy()
 
+    @torch.no_grad()
+    def extract_layer_hidden_states(self, input_ids, layer_idx, attention_mask=None):
+        outputs = self.base_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+        return outputs.hidden_states[layer_idx].squeeze(0).float().cpu().numpy()
+
 
 @torch.no_grad()
 def generate(
@@ -177,6 +185,7 @@ def generate(
     save_intermediate=False,
     tokenizer=None,
     output_file="generation_process.txt",
+    return_history=False,
 ):
     """
     Sample from LLaDA using the reverse diffusion generation procedure.
@@ -209,6 +218,7 @@ def generate(
 
     assert steps % num_blocks == 0
     steps = steps // num_blocks
+    generation_history = []
 
     for num_block in range(num_blocks):
         block_start = prompt.shape[1] + num_block * block_length
@@ -261,6 +271,9 @@ def generate(
                 transfer_index[j, select_index] = True
             x[transfer_index] = x0[transfer_index]
 
+            if return_history:
+                generation_history.append(x.detach().cpu().clone())
+
             if save_intermediate and tokenizer is not None:
                 ids = x[0, prompt.shape[1] :].detach().tolist()
                 parts = []
@@ -288,13 +301,21 @@ def generate(
                     f.write("".join(parts) + "\n")
                     f.write("-" * 50 + "\n")
 
+    if return_history:
+        return x, generation_history
     return x
 
 
-def format_token_labels(tokenizer, token_ids):
+def decode_token_texts(tokenizer, token_ids):
+    return [
+        tokenizer.decode([int(token_id)], skip_special_tokens=False)
+        for token_id in token_ids
+    ]
+
+
+def format_token_labels(token_texts):
     labels = []
-    for token_id in token_ids:
-        piece = tokenizer.decode([int(token_id)], skip_special_tokens=False)
+    for piece in token_texts:
         piece = piece.replace("\n", "\\n").replace("\t", "\\t")
         piece = piece if piece.strip() else repr(piece)
         labels.append(piece[:20])
@@ -302,6 +323,8 @@ def format_token_labels(tokenizer, token_ids):
 
 
 def categorize_token(token_text):
+    if any(ch in token_text for ch in ("\n", "\r")):
+        return "newline"
     stripped = token_text.strip()
     if not stripped:
         return "special"
@@ -312,10 +335,521 @@ def categorize_token(token_text):
     return "lexical"
 
 
+def compute_residual_attention_scores(response_token_ids, response_token_texts, raw_scores):
+    raw_scores = np.asarray(raw_scores, dtype=np.float64)
+    token_types = [categorize_token(text) for text in response_token_texts]
+
+    id_to_indices = {}
+    for idx, token_id in enumerate(response_token_ids):
+        id_to_indices.setdefault(int(token_id), []).append(idx)
+
+    type_to_indices = {}
+    for idx, token_type in enumerate(token_types):
+        type_to_indices.setdefault(token_type, []).append(idx)
+
+    baselines = np.zeros_like(raw_scores)
+    baseline_sources = []
+    for idx, token_id in enumerate(response_token_ids):
+        same_id_indices = id_to_indices[int(token_id)]
+        if len(same_id_indices) >= 2:
+            baselines[idx] = raw_scores[same_id_indices].mean()
+            baseline_sources.append("identity")
+        else:
+            token_type = token_types[idx]
+            baselines[idx] = raw_scores[type_to_indices[token_type]].mean()
+            baseline_sources.append(f"type:{token_type}")
+
+    residual_scores = raw_scores - baselines
+    return token_types, baselines, residual_scores, baseline_sources
+
+
+def compute_residual_attention_graph(response_attention, response_token_ids, response_token_texts):
+    raw_scores = response_attention.mean(axis=0)
+    token_types, baselines, residual_scores, baseline_sources = compute_residual_attention_scores(
+        response_token_ids=response_token_ids,
+        response_token_texts=response_token_texts,
+        raw_scores=raw_scores,
+    )
+    residual_matrix = response_attention - baselines[None, :]
+    positive_residual = np.maximum(residual_matrix, 0.0)
+    symmetric_graph = 0.5 * (positive_residual + positive_residual.T)
+    np.fill_diagonal(symmetric_graph, 0.0)
+    return {
+        "raw_scores": raw_scores,
+        "token_types": token_types,
+        "baselines": baselines,
+        "residual_scores": residual_scores,
+        "baseline_sources": baseline_sources,
+        "residual_matrix": residual_matrix,
+        "graph": symmetric_graph,
+    }
+
+
+def min_max_normalize(values):
+    values = np.asarray(values, dtype=np.float64)
+    if values.size == 0:
+        return values
+    vmin = float(values.min())
+    vmax = float(values.max())
+    if vmax - vmin < 1e-12:
+        return np.zeros_like(values)
+    return (values - vmin) / (vmax - vmin)
+
+
+def compute_hidden_convergence_scores(hidden_state_history, prompt_length):
+    if not hidden_state_history:
+        return np.array([], dtype=np.float64)
+
+    stacked = np.stack(hidden_state_history, axis=0)[:, prompt_length:, :]
+    if stacked.shape[0] < 2:
+        return np.ones(stacked.shape[1], dtype=np.float64)
+
+    step_drift = np.linalg.norm(np.diff(stacked, axis=0), axis=-1)
+    total_drift = step_drift.sum(axis=0)
+    convergence_scores = np.ones(step_drift.shape[1], dtype=np.float64)
+
+    for idx in range(step_drift.shape[1]):
+        if total_drift[idx] <= 1e-12:
+            convergence_scores[idx] = 1.0
+            continue
+        future_drift = np.cumsum(step_drift[::-1, idx])[::-1]
+        stable_step = 0
+        for step_idx, remaining in enumerate(future_drift):
+            if remaining / total_drift[idx] <= 0.2:
+                stable_step = step_idx
+                break
+        convergence_scores[idx] = 1.0 - stable_step / max(step_drift.shape[0] - 1, 1)
+
+    return convergence_scores
+
+
+FORBIDDEN_HEADER_TEXTS = {
+    "\n",
+    "\r",
+    "\t",
+    "<|endoftext|>",
+    "<|eot_id|>",
+    "<|mdm_mask|>",
+    "<",
+    ">",
+    ":",
+    '"',
+    "</",
+    ",",
+    '",',
+    "' '",
+}
+
+
+def is_pure_punct_token(token_text):
+    stripped = token_text.strip()
+    if not stripped:
+        return False
+    return all(not ch.isalnum() for ch in stripped)
+
+
+def is_forbidden_header_token(token_text):
+    if token_text in FORBIDDEN_HEADER_TEXTS:
+        return True
+    if token_text in {"\n", "\r", "\t"}:
+        return True
+    if token_text.startswith("<|") and token_text.endswith("|>"):
+        return True
+    if token_text.strip() == "":
+        return True
+    if is_pure_punct_token(token_text):
+        return True
+    return False
+
+
+def branch_contains_head_pattern(token_texts):
+    normalized = [text.strip() for text in token_texts]
+    sequence = " ".join(normalized)
+    has_open_tag = "< agent _call >" in sequence
+    has_name = "name" in normalized
+    has_agent = any(text.endswith("Agent") for text in normalized)
+    return has_open_tag and has_name and has_agent
+
+
+def branch_is_lexical_continuation(token_texts):
+    lexical_count = sum(categorize_token(text) == "lexical" for text in token_texts)
+    opening_tag_count = sum(text.strip() in {"<", "</"} for text in token_texts)
+    return lexical_count >= max(4, len(token_texts) // 2) and opening_tag_count <= 1
+
+
+def has_hard_structural_boundary(left_tokens, right_tokens):
+    left_tail = [text.strip() for text in left_tokens[-6:]]
+    right_head = [text.strip() for text in right_tokens[:6]]
+    if ">" in left_tail and "<" in right_head:
+        return True
+    if "</" in left_tail and "<" in right_head:
+        return True
+    return False
+
+
+def merge_super_branches(branch_spans, token_texts, graph, merge_tolerance=1.35):
+    if len(branch_spans) <= 1:
+        return branch_spans
+
+    merged = [branch_spans[0]]
+    for next_start, next_end in branch_spans[1:]:
+        prev_start, prev_end = merged[-1]
+        left_tokens = token_texts[prev_start:prev_end]
+        right_tokens = token_texts[next_start:next_end]
+
+        left_pattern = branch_contains_head_pattern(left_tokens)
+        right_continuation = branch_is_lexical_continuation(right_tokens)
+        hard_boundary = has_hard_structural_boundary(left_tokens, right_tokens)
+
+        boundary_weight = float(graph[prev_end - 1, next_start]) if prev_end - 1 >= 0 else 0.0
+        left_internal = float(graph[prev_start:prev_end, prev_start:prev_end].mean()) if prev_end > prev_start else 0.0
+        right_internal = float(graph[next_start:next_end, next_start:next_end].mean()) if next_end > next_start else 0.0
+        internal_ref = max((left_internal + right_internal) / 2.0, 1e-12)
+        weak_boundary = boundary_weight <= internal_ref * merge_tolerance
+
+        if left_pattern and right_continuation and not hard_boundary and weak_boundary:
+            merged[-1] = (prev_start, next_end)
+        else:
+            merged.append((next_start, next_end))
+
+    return merged
+
+
+def slice_response_data(token_ids, token_texts, token_labels, prompt_length):
+    return {
+        "token_ids": token_ids[prompt_length:],
+        "token_texts": token_texts[prompt_length:],
+        "token_labels": token_labels[prompt_length:],
+    }
+
+
+def detect_branch_spans(graph, min_branch_size=8, max_branches=6, window_size=6):
+    num_tokens = graph.shape[0]
+    if num_tokens == 0:
+        return []
+    if num_tokens <= min_branch_size * 2:
+        return [(0, num_tokens)]
+
+    boundary_scores = []
+    for boundary in range(num_tokens - 1):
+        left_start = max(0, boundary - window_size + 1)
+        left = np.arange(left_start, boundary + 1)
+        right_end = min(num_tokens, boundary + 1 + window_size)
+        right = np.arange(boundary + 1, right_end)
+        if len(left) == 0 or len(right) == 0:
+            boundary_scores.append(np.inf)
+            continue
+        cross_strength = graph[np.ix_(left, right)].mean()
+        boundary_scores.append(float(cross_strength))
+
+    finite_scores = np.array([score for score in boundary_scores if np.isfinite(score)], dtype=np.float64)
+    if finite_scores.size == 0:
+        return [(0, num_tokens)]
+
+    threshold = float(np.quantile(finite_scores, 0.35))
+    candidate_boundaries = []
+    for boundary, score in enumerate(boundary_scores):
+        if not np.isfinite(score) or score > threshold:
+            continue
+        left_ok = boundary == 0 or score <= boundary_scores[boundary - 1]
+        right_ok = boundary == num_tokens - 2 or score <= boundary_scores[boundary + 1]
+        if left_ok and right_ok:
+            candidate_boundaries.append((score, boundary))
+
+    selected = []
+    for _, boundary in sorted(candidate_boundaries):
+        proposed = sorted(selected + [boundary])
+        start = 0
+        valid = True
+        for cut in proposed:
+            if cut + 1 - start < min_branch_size:
+                valid = False
+                break
+            start = cut + 1
+        if valid and num_tokens - start >= min_branch_size:
+            selected = proposed
+        if len(selected) + 1 >= max_branches:
+            break
+
+    spans = []
+    start = 0
+    for boundary in selected:
+        spans.append((start, boundary + 1))
+        start = boundary + 1
+    spans.append((start, num_tokens))
+    return spans
+
+
+def compute_branch_bridge_scores(graph, branch_start, branch_end):
+    branch_indices = np.arange(branch_start, branch_end)
+    outside_indices = np.concatenate(
+        [np.arange(0, branch_start), np.arange(branch_end, graph.shape[0])]
+    )
+    if len(branch_indices) == 0:
+        return np.array([], dtype=np.float64)
+
+    branch_graph = graph[np.ix_(branch_indices, branch_indices)]
+    internal_strength = branch_graph.sum(axis=1)
+    if outside_indices.size == 0:
+        external_strength = np.zeros(len(branch_indices), dtype=np.float64)
+    else:
+        external_strength = graph[np.ix_(branch_indices, outside_indices)].sum(axis=1)
+    return np.sqrt(np.maximum(internal_strength, 0.0) * np.maximum(external_strength, 0.0))
+
+
+def identify_header_span(
+    graph,
+    residual_scores,
+    convergence_scores,
+    token_texts,
+    branch_start,
+    branch_end,
+    min_header_tokens=2,
+    max_header_tokens=8,
+):
+    branch_indices = np.arange(branch_start, branch_end)
+    if branch_indices.size == 0:
+        return branch_start, branch_start
+
+    bridge_scores = compute_branch_bridge_scores(graph, branch_start, branch_end)
+    branch_salience = min_max_normalize(residual_scores[branch_indices])
+    branch_bridge = min_max_normalize(bridge_scores)
+    if convergence_scores.size == 0:
+        branch_convergence = np.zeros(branch_indices.size, dtype=np.float64)
+    else:
+        branch_convergence = min_max_normalize(convergence_scores[branch_indices])
+
+    token_weights = branch_salience + branch_bridge + branch_convergence
+    valid_mask = np.array(
+        [not is_forbidden_header_token(token_texts[idx]) for idx in branch_indices],
+        dtype=np.float64,
+    )
+    weighted_scores = token_weights * valid_mask
+
+    best = None
+    max_span_len = min(max_header_tokens, branch_indices.size)
+    min_span_len = min(min_header_tokens, max_span_len)
+    if min_span_len <= 0:
+        min_span_len = 1
+
+    for span_len in range(min_span_len, max_span_len + 1):
+        for start_offset in range(0, branch_indices.size - span_len + 1):
+            end_offset = start_offset + span_len
+            span_mask = valid_mask[start_offset:end_offset]
+            valid_count = int(span_mask.sum())
+            if valid_count == 0:
+                continue
+            if valid_count < max(1, math.ceil(span_len * 0.5)):
+                continue
+            span_score = float(weighted_scores[start_offset:end_offset].sum() / valid_count)
+            candidate = (span_score, valid_count, -start_offset, -span_len, start_offset, end_offset)
+            if best is None or candidate > best:
+                best = candidate
+
+    if best is not None:
+        _, _, _, _, start_offset, end_offset = best
+        return branch_start + start_offset, branch_start + end_offset
+
+    lexical_offsets = [
+        offset
+        for offset, idx in enumerate(branch_indices)
+        if categorize_token(token_texts[idx]) == "lexical"
+    ]
+    if lexical_offsets:
+        start_offset = lexical_offsets[0]
+        end_offset = min(branch_indices.size, start_offset + min_header_tokens)
+        return branch_start + start_offset, branch_start + end_offset
+
+    return branch_start, min(branch_end, branch_start + 1)
+
+
+def analyze_response_structure(
+    extractor,
+    tokenizer,
+    sequence_ids,
+    attention_mask,
+    prompt_length,
+    layer_idx,
+    generation_history=None,
+    min_branch_size=8,
+    max_branches=6,
+):
+    token_ids = sequence_ids[0].detach().cpu().tolist()
+    token_texts = decode_token_texts(tokenizer, token_ids)
+    token_labels = format_token_labels(token_texts)
+    response_data = slice_response_data(token_ids, token_texts, token_labels, prompt_length)
+
+    attention_matrix = extractor.extract_layer_attention(
+        input_ids=sequence_ids,
+        layer_idx=layer_idx,
+        attention_mask=attention_mask,
+    )
+    response_attention = np.asarray(attention_matrix[prompt_length:, prompt_length:], dtype=np.float64)
+
+    if response_attention.size == 0:
+        return None
+
+    graph_data = compute_residual_attention_graph(
+        response_attention=response_attention,
+        response_token_ids=response_data["token_ids"],
+        response_token_texts=response_data["token_texts"],
+    )
+    graph = graph_data["graph"]
+    branch_spans = detect_branch_spans(
+        graph,
+        min_branch_size=min_branch_size,
+        max_branches=max_branches,
+    )
+    branch_spans = merge_super_branches(
+        branch_spans=branch_spans,
+        token_texts=response_data["token_texts"],
+        graph=graph,
+    )
+
+    hidden_state_history = []
+    for snapshot in generation_history or []:
+        hidden_states = extractor.extract_layer_hidden_states(
+            input_ids=snapshot.to(sequence_ids.device),
+            layer_idx=layer_idx,
+            attention_mask=attention_mask,
+        )
+        hidden_state_history.append(hidden_states)
+    convergence_scores = compute_hidden_convergence_scores(hidden_state_history, prompt_length)
+
+    branch_entries = []
+    for branch_idx, (start, end) in enumerate(branch_spans, start=1):
+        header_start, header_end = identify_header_span(
+            graph=graph,
+            residual_scores=graph_data["residual_scores"],
+            convergence_scores=convergence_scores,
+            token_texts=response_data["token_texts"],
+            branch_start=start,
+            branch_end=end,
+        )
+        branch_graph = graph[start:end, start:end]
+        within_strength = float(branch_graph.mean()) if branch_graph.size > 0 else 0.0
+        if start == 0 and end == graph.shape[0]:
+            external_strength = 0.0
+        else:
+            outside_indices = np.concatenate([np.arange(0, start), np.arange(end, graph.shape[0])])
+            external_strength = (
+                float(graph[np.ix_(np.arange(start, end), outside_indices)].mean())
+                if outside_indices.size > 0
+                else 0.0
+            )
+        header_score = (
+            float(graph_data["residual_scores"][header_start:header_end].mean())
+            if header_end > header_start
+            else 0.0
+        )
+        branch_entries.append(
+            {
+                "branch_idx": branch_idx,
+                "start": start,
+                "end": end,
+                "header_start": header_start,
+                "header_end": header_end,
+                "within_strength": within_strength,
+                "external_strength": external_strength,
+                "header_score": header_score,
+            }
+        )
+
+    reveal_order = sorted(
+        branch_entries,
+        key=lambda entry: (entry["header_score"], entry["within_strength"] - entry["external_strength"]),
+        reverse=True,
+    )
+
+    return {
+        "layer_idx": layer_idx,
+        "graph": graph,
+        "response_data": response_data,
+        "branch_entries": branch_entries,
+        "reveal_order": reveal_order,
+    }
+
+
+def save_structure_summary(
+    model,
+    tokenizer,
+    sequence_ids,
+    attention_mask,
+    prompt_length,
+    layer_idx,
+    output_path,
+    generation_history=None,
+    min_branch_size=8,
+    max_branches=6,
+):
+    extractor = ManualAttentionExtractor(model)
+    structure = analyze_response_structure(
+        extractor=extractor,
+        tokenizer=tokenizer,
+        sequence_ids=sequence_ids,
+        attention_mask=attention_mask,
+        prompt_length=prompt_length,
+        layer_idx=layer_idx,
+        generation_history=generation_history,
+        min_branch_size=min_branch_size,
+        max_branches=max_branches,
+    )
+
+    if structure is None:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(f"layer={layer_idx}\n")
+            f.write("no response tokens\n")
+        return
+
+    graph = structure["graph"]
+    response_token_labels = structure["response_data"]["token_labels"]
+    branch_entries = structure["branch_entries"]
+    reveal_order = structure["reveal_order"]
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(f"layer={layer_idx}\n")
+        f.write("step1_residual_graph:\n")
+        f.write(f"num_tokens={len(response_token_labels)} positive_edge_mass={float(graph.sum()):.6f}\n")
+        f.write("step2_branches:\n")
+        for entry in branch_entries:
+            branch_tokens = " ".join(repr(tok) for tok in response_token_labels[entry["start"] : entry["end"]])
+            f.write(
+                f"branch{entry['branch_idx']}: span=[{entry['start']},{entry['end']}) "
+                f"within={entry['within_strength']:.6f} outside={entry['external_strength']:.6f} "
+                f"tokens={branch_tokens}\n"
+            )
+        f.write("step3_header_spans:\n")
+        for entry in branch_entries:
+            header_tokens = " ".join(
+                repr(tok) for tok in response_token_labels[entry["header_start"] : entry["header_end"]]
+            )
+            f.write(
+                f"branch{entry['branch_idx']}: header=[{entry['header_start']},{entry['header_end']}) "
+                f"header_score={entry['header_score']:.6f} tokens={header_tokens}\n"
+            )
+        f.write("step4_reveal_headers_first:\n")
+        for rank, entry in enumerate(reveal_order, start=1):
+            f.write(
+                f"rank{rank}: branch{entry['branch_idx']} "
+                f"reveal_span=[{entry['header_start']},{entry['header_end']})\n"
+            )
+        f.write("step5_parallel_branch_expansion:\n")
+        for entry in reveal_order:
+            remaining = [
+                idx
+                for idx in range(entry["start"], entry["end"])
+                if idx < entry["header_start"] or idx >= entry["header_end"]
+            ]
+            f.write(
+                f"branch{entry['branch_idx']}: remaining_positions={remaining}\n"
+            )
+
+
 def save_attention_summary(
     attention_matrix,
     token_ids,
     token_labels,
+    token_texts,
     output_path,
     layer_idx,
     prompt_length,
@@ -323,43 +857,70 @@ def save_attention_summary(
 ):
     attention_matrix = np.asarray(attention_matrix, dtype=np.float64)
     response_attention = attention_matrix[prompt_length:, prompt_length:]
-    response_token_ids = token_ids[prompt_length:]
-    response_token_labels = token_labels[prompt_length:]
+    response_data = slice_response_data(token_ids, token_texts, token_labels, prompt_length)
+    response_token_labels = response_data["token_labels"]
 
-    if response_attention.size == 0 or len(response_token_ids) == 0:
+    if response_attention.size == 0 or len(response_data["token_ids"]) == 0:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(f"layer={layer_idx}\n")
             f.write("no response tokens\n")
         return
 
-    mean_scores = response_attention.mean(axis=0)
-    top_k = min(top_k, len(mean_scores))
-    top_indices = np.argsort(mean_scores)[::-1][:top_k]
+    raw_scores = response_attention.mean(axis=0)
+    token_types, baselines, residual_scores, baseline_sources = compute_residual_attention_scores(
+        response_token_ids=response_data["token_ids"],
+        response_token_texts=response_data["token_texts"],
+        raw_scores=raw_scores,
+    )
 
-    type_scores = {"punct": 0.0, "special": 0.0, "lexical": 0.0}
-    total_score = float(mean_scores.sum())
+    top_k = min(top_k, len(raw_scores))
+    raw_top_indices = np.argsort(raw_scores)[::-1][:top_k]
+    residual_top_indices = np.argsort(residual_scores)[::-1][:top_k]
+
+    type_scores = {"newline": 0.0, "punct": 0.0, "special": 0.0, "lexical": 0.0}
+    total_score = float(raw_scores.sum())
     if total_score > 0:
-        for idx, score in enumerate(mean_scores):
-            token_type = categorize_token(response_token_labels[idx])
+        for idx, score in enumerate(raw_scores):
+            token_type = token_types[idx]
             type_scores[token_type] += float(score)
         for key in type_scores:
             type_scores[key] /= total_score
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(f"layer={layer_idx}\n")
-        for rank, idx in enumerate(top_indices, start=1):
+        f.write("raw_top_tokens:\n")
+        for rank, idx in enumerate(raw_top_indices, start=1):
             f.write(
                 f"top{rank}: idx={idx} token={response_token_labels[idx]!r} "
-                f"token_id={response_token_ids[idx]} score={mean_scores[idx]:.6f}\n"
+                f"token_id={response_data['token_ids'][idx]} type={token_types[idx]} "
+                f"raw={raw_scores[idx]:.6f}\n"
+            )
+        f.write("residual_top_tokens:\n")
+        for rank, idx in enumerate(residual_top_indices, start=1):
+            f.write(
+                f"top{rank}: idx={idx} token={response_token_labels[idx]!r} "
+                f"token_id={response_data['token_ids'][idx]} type={token_types[idx]} "
+                f"raw={raw_scores[idx]:.6f} baseline={baselines[idx]:.6f} "
+                f"residual={residual_scores[idx]:.6f} baseline_source={baseline_sources[idx]}\n"
             )
         f.write("type_distribution:\n")
         f.write(
-            "punct={:.2f}, special={:.2f}, lexical={:.2f}\n".format(
+            "newline={:.2f}, punct={:.2f}, special={:.2f}, lexical={:.2f}\n".format(
+                type_scores["newline"],
                 type_scores["punct"],
                 type_scores["special"],
                 type_scores["lexical"],
             )
         )
+        f.write("all_response_tokens:\n")
+        for idx, (token_id, token_label) in enumerate(
+            zip(response_data["token_ids"], response_token_labels)
+        ):
+            f.write(
+                f"idx={idx} token={token_label!r} token_id={token_id} type={token_types[idx]} "
+                f"raw={raw_scores[idx]:.6f} baseline={baselines[idx]:.6f} "
+                f"residual={residual_scores[idx]:.6f} baseline_source={baseline_sources[idx]}\n"
+            )
 
 
 def plot_attention_heatmap(
@@ -414,7 +975,8 @@ def save_manual_attention_heatmaps(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     token_ids = sequence_ids[0].detach().cpu().tolist()
-    token_labels = format_token_labels(tokenizer, token_ids)
+    token_texts = decode_token_texts(tokenizer, token_ids)
+    token_labels = format_token_labels(token_texts)
 
     for layer_idx in layers:
         if layer_idx < 0 or layer_idx >= extractor.num_layers:
@@ -432,6 +994,7 @@ def save_manual_attention_heatmaps(
             attention_matrix=attn_matrix,
             token_ids=token_ids,
             token_labels=token_labels,
+            token_texts=token_texts,
             output_path=output_dir / f"{prefix}_layer_{layer_idx}_attention.txt",
             layer_idx=layer_idx,
             prompt_length=prompt_length,
@@ -458,9 +1021,12 @@ def parse_args():
     parser.add_argument("--block-length", type=int, default=32)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--cfg-scale", type=float, default=0.0)
-    parser.add_argument("--layers", type=int, nargs="+", default=[0, 1, 2, 3])
+    parser.add_argument("--layers", type=int, nargs="+", default=[28, 29, 30, 31])
     parser.add_argument("--max-plot-tokens", type=int, default=512)
-    parser.add_argument("--summary-top-k", type=int, default=100)
+    parser.add_argument("--summary-top-k", type=int, default=30)
+    parser.add_argument("--structure-layer", type=int, default=None)
+    parser.add_argument("--structure-min-branch-size", type=int, default=8)
+    parser.add_argument("--structure-max-branches", type=int, default=6)
     parser.add_argument(
         "--heatmap-dir",
         type=str,
@@ -563,7 +1129,7 @@ def main():
     if args.save_intermediate and os.path.exists(args.output_file):
         os.remove(args.output_file)
 
-    out = generate(
+    out, generation_history = generate(
         model,
         input_ids,
         attention_mask=attention_mask,
@@ -576,6 +1142,7 @@ def main():
         save_intermediate=args.save_intermediate,
         tokenizer=tokenizer,
         output_file=args.output_file,
+        return_history=True,
     )
 
     generated_text = tokenizer.batch_decode(
@@ -608,6 +1175,22 @@ def main():
         prefix="generated",
         max_tokens=args.max_plot_tokens,
         summary_top_k=args.summary_top_k,
+    )
+
+    structure_layer = args.structure_layer
+    if structure_layer is None:
+        structure_layer = args.layers[-1]
+    save_structure_summary(
+        model=model,
+        tokenizer=tokenizer,
+        sequence_ids=out,
+        attention_mask=final_attention_mask,
+        prompt_length=input_ids.shape[1],
+        layer_idx=structure_layer,
+        output_path=Path(args.heatmap_dir) / f"generated_layer_{structure_layer}_structure.txt",
+        generation_history=generation_history,
+        min_branch_size=args.structure_min_branch_size,
+        max_branches=args.structure_max_branches,
     )
 
 
