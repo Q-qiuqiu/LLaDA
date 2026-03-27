@@ -1021,7 +1021,7 @@ def parse_args():
     parser.add_argument("--block-length", type=int, default=32)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--cfg-scale", type=float, default=0.0)
-    parser.add_argument("--layers", type=int, nargs="+", default=[28, 29, 30, 31])
+    parser.add_argument("--layers", type=int, nargs="+", default=[0, 1, 30, 31])
     parser.add_argument("--max-plot-tokens", type=int, default=512)
     parser.add_argument("--summary-top-k", type=int, default=30)
     parser.add_argument("--structure-layer", type=int, default=None)
@@ -1093,11 +1093,11 @@ def main():
 
     Output format (STRICT):
     Produce a list of agent calls. Each call must be independent and follow this structure:
-    <agent_call>
+    {
     name: <AgentName>
     arguments: <key>: <value>
     ...
-    </agent_call>
+    }
     ---
 
     Requirements:
