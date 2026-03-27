@@ -42,6 +42,10 @@
             margin-bottom: 20px;
             text-align: center;
         }
+        .file-selector {
+            margin-bottom: 16px;
+            text-align: center;
+        }
         button {
             padding: 10px 20px;
             margin: 0 10px;
@@ -136,6 +140,13 @@
 <body>
     <div class="container">
         <h1>LLaDA 去噪过程可视化</h1>
+
+        <div class="file-selector">
+            <label for="fileSelect">选择日志文件:</label>
+            <select id="fileSelect" onchange="handleFileChange()">
+                <option value="">加载中...</option>
+            </select>
+        </div>
         
         <div class="controls">
             <button id="prevBtn" onclick="showPrevStep()" disabled>上一步</button>
@@ -174,6 +185,7 @@
         let autoPlayInterval = null;
         let autoPlaySpeed = 1000; // 毫秒
         let blocks = [];
+        let currentFile = '';
 
         function renderWithMaskHighlight(text) {
             if (!text) return '';
@@ -196,12 +208,54 @@
                         })
                         .join('');
         }
+        async function loadFileList() {
+            const select = document.getElementById('fileSelect');
+            select.innerHTML = '<option value="">加载中...</option>';
+
+            const response = await fetch('/api/files');
+            if (!response.ok) {
+                throw new Error(`文件列表加载失败: ${response.status}`);
+            }
+
+            const files = await response.json();
+            if (!files.length) {
+                select.innerHTML = '<option value="">当前目录没有 txt 文件</option>';
+                currentFile = '';
+                return false;
+            }
+
+            select.innerHTML = '';
+            files.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                select.appendChild(option);
+            });
+
+            if (!files.includes(currentFile)) {
+                currentFile = files[0];
+            }
+            select.value = currentFile;
+            return true;
+        }
+
         // 加载数据
         async function loadData() {
             try {
                 document.getElementById('stepResult').textContent = '加载中...';
-                
-                const response = await fetch('/api/steps');
+
+                const hasFiles = await loadFileList();
+                if (!hasFiles) {
+                    steps = [];
+                    blocks = [];
+                    document.getElementById('stepResult').textContent = '当前目录下没有可用的 txt 文件';
+                    document.getElementById('stepInfo').textContent = '无数据';
+                    updateControls();
+                    updateBlocksDisplay();
+                    return;
+                }
+
+                const response = await fetch(`/api/steps?file=${encodeURIComponent(currentFile)}`);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -209,7 +263,7 @@
                 steps = await response.json();
                 
                 if (steps.length === 0) {
-                    document.getElementById('stepResult').textContent = '暂无数据，请检查 denoise_log.txt 文件';
+                    document.getElementById('stepResult').textContent = `暂无数据，请检查 ${currentFile} 的日志格式`;
                     document.getElementById('stepInfo').textContent = '无数据';
                     updateControls();
                     return;
@@ -229,15 +283,43 @@
             }
         }
 
+        function handleFileChange() {
+            const nextFile = document.getElementById('fileSelect').value;
+            if (!nextFile || nextFile === currentFile) {
+                return;
+            }
+
+            currentFile = nextFile;
+
+            if (autoPlayInterval) {
+                clearInterval(autoPlayInterval);
+                autoPlayInterval = null;
+                document.getElementById('autoPlayBtn').textContent = '自动播放';
+            }
+
+            loadData();
+        }
+
         // 显示当前步骤
         function displayCurrentStep() {
             if (steps.length === 0) return;
             
             const step = steps[currentStepIndex];
+            const metaParts = [];
+
+            if (step.transferredTokens !== null && step.transferredTokens !== undefined) {
+                metaParts.push(`已转移 token 数: ${step.transferredTokens}`);
+            }
+            if (step.selectedTokens !== null && step.selectedTokens !== undefined) {
+                metaParts.push(`本步选中 token 数: ${step.selectedTokens}`);
+            }
+            if (step.remainRatio !== null && step.remainRatio !== undefined) {
+                metaParts.push(`remain_ratio: ${step.remainRatio}`);
+            }
             
             // 更新进度信息
             document.getElementById('stepInfo').innerHTML = 
-                `步骤 ${step.stepNum}/${step.totalSteps} (块 ${step.block}), 已转移 token 数: ${step.transferredTokens}`;
+                `步骤 ${step.stepNum}/${step.totalSteps} (块 ${step.block})${metaParts.length ? ', ' + metaParts.join(', ') : ''}`;
             
             // 更新结果内容
             //document.getElementById('stepResult').textContent = step.result || '无结果';

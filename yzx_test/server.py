@@ -15,6 +15,34 @@ import json
 import re
 
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+VISUALIZER_HTML = os.path.join(BASE_DIR, 'denoise_visualizer.html')
+
+
+def list_txt_files():
+    files = []
+    for name in os.listdir(BASE_DIR):
+        path = os.path.join(BASE_DIR, name)
+        if os.path.isfile(path) and name.lower().endswith('.txt'):
+            files.append(name)
+    return sorted(files)
+
+
+def resolve_selected_file(query_params):
+    files = list_txt_files()
+    if not files:
+        return None, "当前目录下没有可用的 txt 文件"
+
+    requested = query_params.get('file', [None])[0]
+    if requested:
+        safe_name = os.path.basename(requested)
+        if safe_name not in files:
+            return None, f"File not found: {safe_name}"
+        return os.path.join(BASE_DIR, safe_name), None
+
+    return os.path.join(BASE_DIR, files[0]), None
+
+
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -24,12 +52,15 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed_path = urlparse(self.path)
-        
-        file_name='/home/yzx/LLaDA/yzx_test/denoise_log_128_128_128.txt'
+        query_params = parse_qs(parsed_path.query)
 
         if parsed_path.path == '/denoise_log.txt':
             # 返回日志文件内容
             try:
+                file_name, error = resolve_selected_file(query_params)
+                if error:
+                    self.send_error(404, error)
+                    return
                 with open(file_name, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
@@ -41,10 +72,24 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_error(404, "File not found")
             except Exception as e:
                 self.send_error(500, f"Server error: {str(e)}")
+
+        elif parsed_path.path == '/api/files':
+            try:
+                files = list_txt_files()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(files, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_error(500, f"Server error: {str(e)}")
         
         elif parsed_path.path == '/api/steps':
             # 返回解析后的步骤数据
             try:
+                file_name, error = resolve_selected_file(query_params)
+                if error:
+                    self.send_error(404, error)
+                    return
                 with open(file_name, 'r', encoding='utf-8') as f:
                     log_content = f.read()
                 
@@ -62,7 +107,7 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif parsed_path.path == '/' or parsed_path.path == '/index.html':
             # 返回可视化界面HTML
             try:
-                with open('/home/yzx/LLaDA/yzx_test/denoise_visualizer.html', 'r', encoding='utf-8') as f:
+                with open(VISUALIZER_HTML, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
                 self.send_response(200)
@@ -79,17 +124,28 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
     
     def parse_log_content(self, content):
-        """解析日志内容为步骤数组（兼容：Block X Step i/j transferred=k 的格式）"""
+        """解析日志内容为步骤数组，兼容 transferred/selected 等头部格式。"""
         steps = []
         lines = content.splitlines()
 
         current_step = None
         result_lines = []
 
-        # 兼容新格式：Block 1 Step 1/8 transferred=4
-        new_header = re.compile(r'^Block\s+(\d+)\s+Step\s+(\d+)/(\d+)\s+transferred=(\d+)\s*$')
+        # 兼容新格式：
+        # Block 1 Step 1/8 transferred=4
+        # Block 1 Step 1/128 selected=23 remain_ratio=1.0000
+        new_header = re.compile(r'^Block\s+(\d+)\s+Step\s+(\d+)/(\d+)(?:\s+(.*))?\s*$')
         # 兼容旧格式：Step 1/8 (Block 1), Transferred tokens: 4
         old_header = re.compile(r'^Step\s+(\d+)/(\d+)\s+\(Block\s+(\d+)\),\s+Transferred tokens:\s+(\d+)\s*$')
+
+        def parse_metrics(extra_text):
+            metrics = {}
+            if not extra_text:
+                return metrics
+
+            for key, value in re.findall(r'([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)', extra_text):
+                metrics[key] = value
+            return metrics
 
         def flush_current():
             nonlocal current_step, result_lines
@@ -111,12 +167,15 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             m = new_header.match(s)
             if m:
+                metrics = parse_metrics(m.group(4))
                 flush_current()
                 current_step = {
                     'stepNum': int(m.group(2)),
                     'totalSteps': int(m.group(3)),
                     'block': int(m.group(1)),
-                    'transferredTokens': int(m.group(4)),
+                    'transferredTokens': int(metrics['transferred']) if metrics.get('transferred', '').isdigit() else None,
+                    'selectedTokens': int(metrics['selected']) if metrics.get('selected', '').isdigit() else None,
+                    'remainRatio': metrics.get('remain_ratio'),
                     'result': ''
                 }
                 continue
@@ -129,6 +188,8 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     'totalSteps': int(m.group(2)),
                     'block': int(m.group(3)),
                     'transferredTokens': int(m.group(4)),
+                    'selectedTokens': None,
+                    'remainRatio': None,
                     'result': ''
                 }
                 continue
@@ -167,7 +228,7 @@ def signal_handler(sig, frame):
 
 
 def main():
-    DIRECTORY = "/home/yzx/LLaDA"
+    DIRECTORY = BASE_DIR
     
     # 更改工作目录
     os.chdir(DIRECTORY)

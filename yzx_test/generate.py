@@ -711,9 +711,9 @@ def process_batch_examples(
             )
             print("Generated Answer:", generated_text)
             print("==================\n")
-            output_path = os.path.join(
-                output_dir, f"{example_id}_attentions.npz"
-            )
+            # output_path = os.path.join(
+            #     output_dir, f"{example_id}_attentions.npz"
+            # )
             extractor.save_attentions(result, output_path)
 
         except Exception as e:
