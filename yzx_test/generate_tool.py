@@ -482,7 +482,7 @@ Returns:
         tokenizer=tokenizer,
         suppress_eos_eot=True,
         save_intermediate=True,
-        output_file="denoise_log_128_128_128.txt",
+        output_file="generate_tool.txt",
     )
 
     # 解码最终结果（只取生成区）

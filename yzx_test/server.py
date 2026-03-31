@@ -124,85 +124,144 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             super().do_GET()
     
     def parse_log_content(self, content):
-        """解析日志内容为步骤数组，兼容 transferred/selected 等头部格式。"""
-        steps = []
-        lines = content.splitlines()
+        """按分隔线切块解析日志，并尽量从每块首行提取步骤元信息。"""
 
-        current_step = None
-        result_lines = []
-
-        # 兼容新格式：
-        # Block 1 Step 1/8 transferred=4
-        # Block 1 Step 1/128 selected=23 remain_ratio=1.0000
-        new_header = re.compile(r'^Block\s+(\d+)\s+Step\s+(\d+)/(\d+)(?:\s+(.*))?\s*$')
-        # 兼容旧格式：Step 1/8 (Block 1), Transferred tokens: 4
-        old_header = re.compile(r'^Step\s+(\d+)/(\d+)\s+\(Block\s+(\d+)\),\s+Transferred tokens:\s+(\d+)\s*$')
+        def is_separator(line):
+            stripped = line.strip()
+            return len(stripped) >= 20 and set(stripped) == {'-'}
 
         def parse_metrics(extra_text):
             metrics = {}
             if not extra_text:
                 return metrics
-
             for key, value in re.findall(r'([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)', extra_text):
                 metrics[key] = value
             return metrics
 
-        def flush_current():
-            nonlocal current_step, result_lines
-            if current_step is None:
-                return
-            # 保留换行更适合展示（HTML 里用 pre-wrap）
-            current_step['result'] = "\n".join(result_lines).rstrip()
-            steps.append(current_step)
-            current_step = None
-            result_lines = []
+        def to_int(value):
+            if value is None:
+                return None
+            value = str(value).strip()
+            if value.isdigit():
+                return int(value)
+            return None
 
-        for raw_line in lines:
-            line = raw_line.rstrip("\n")
-            s = line.strip()
+        def split_into_chunks(raw_content):
+            chunks = []
+            current_lines = []
+            for line in raw_content.splitlines():
+                if is_separator(line):
+                    if current_lines and any(item.strip() for item in current_lines):
+                        chunks.append("\n".join(current_lines).strip("\n"))
+                    current_lines = []
+                    continue
+                current_lines.append(line)
 
-            # 分隔线：不作为内容写入
-            if s.startswith('---') and set(s) <= set('-'):
-                continue
+            if current_lines and any(item.strip() for item in current_lines):
+                chunks.append("\n".join(current_lines).strip("\n"))
+            return chunks
 
-            m = new_header.match(s)
-            if m:
-                metrics = parse_metrics(m.group(4))
-                flush_current()
-                current_step = {
-                    'stepNum': int(m.group(2)),
-                    'totalSteps': int(m.group(3)),
-                    'block': int(m.group(1)),
-                    'transferredTokens': int(metrics['transferred']) if metrics.get('transferred', '').isdigit() else None,
-                    'selectedTokens': int(metrics['selected']) if metrics.get('selected', '').isdigit() else None,
-                    'remainRatio': metrics.get('remain_ratio'),
-                    'result': ''
-                }
-                continue
+        def parse_chunk(chunk_text, default_index):
+            lines = chunk_text.splitlines()
+            while lines and not lines[0].strip():
+                lines.pop(0)
+            while lines and not lines[-1].strip():
+                lines.pop()
 
-            m = old_header.match(s)
-            if m:
-                flush_current()
-                current_step = {
-                    'stepNum': int(m.group(1)),
-                    'totalSteps': int(m.group(2)),
-                    'block': int(m.group(3)),
-                    'transferredTokens': int(m.group(4)),
-                    'selectedTokens': None,
-                    'remainRatio': None,
-                    'result': ''
-                }
-                continue
+            if not lines:
+                return None
 
-            # 如果已经进入某个 step，就把后续行当作结果内容
-            if current_step is not None:
-                result_lines.append(line)
+            # 兼容：
+            # Block 1 Step 1/128 selected=23 remain_ratio=1.0000
+            block_header_re = re.compile(r'^Block\s+(\d+)\s+Step\s+(\d+)/(\d+)(?:\s+(.*))?\s*$')
+            # 兼容：
+            # Step 1/128 stage=TOOL k=2 remaining=128
+            step_header_re = re.compile(r'^Step\s+(\d+)/(\d+)(?:\s+(.*))?\s*$')
+            # 兼容旧格式：
+            # Step 1/8 (Block 1), Transferred tokens: 4
+            old_header_re = re.compile(r'^Step\s+(\d+)/(\d+)\s+\(Block\s+(\d+)\),\s+Transferred tokens:\s+(\d+)\s*$')
 
-        # 别忘了最后一个 step
-        flush_current()
+            header_index = None
+            matched_header = None
+            matched_header_type = None
+            for index, line in enumerate(lines):
+                header = line.strip()
+                for header_type, pattern in (
+                    ('block', block_header_re),
+                    ('old', old_header_re),
+                    ('step', step_header_re),
+                ):
+                    match = pattern.match(header)
+                    if match:
+                        header_index = index
+                        matched_header = match
+                        matched_header_type = header_type
+                        break
+                if matched_header is not None:
+                    break
 
-        # 按 block + step 排序（你原来就这么做）
-        steps.sort(key=lambda x: (x['block'], x['stepNum']))
+            step_num = default_index
+            total_steps = None
+            block = 1
+            transferred_tokens = None
+            selected_tokens = None
+            remain_ratio = None
+            body_lines = lines[:]
+
+            if matched_header_type == 'block':
+                metrics = parse_metrics(matched_header.group(4))
+                step_num = int(matched_header.group(2))
+                total_steps = int(matched_header.group(3))
+                block = int(matched_header.group(1))
+                transferred_tokens = to_int(metrics.get('transferred'))
+                selected_tokens = to_int(metrics.get('selected'))
+                remain_ratio = metrics.get('remain_ratio')
+                body_lines = lines[header_index + 1:]
+            elif matched_header_type == 'old':
+                step_num = int(matched_header.group(1))
+                total_steps = int(matched_header.group(2))
+                block = int(matched_header.group(3))
+                transferred_tokens = int(matched_header.group(4))
+                body_lines = lines[header_index + 1:]
+            elif matched_header_type == 'step':
+                metrics = parse_metrics(matched_header.group(3))
+                step_num = int(matched_header.group(1))
+                total_steps = int(matched_header.group(2))
+                transferred_tokens = to_int(metrics.get('transferred'))
+                selected_tokens = to_int(metrics.get('selected'))
+                remain_ratio = metrics.get('remain_ratio')
+                body_lines = lines[header_index + 1:]
+
+            return {
+                'stepNum': step_num,
+                'totalSteps': total_steps,
+                'block': block,
+                'transferredTokens': transferred_tokens,
+                'selectedTokens': selected_tokens,
+                'remainRatio': remain_ratio,
+                'result': "\n".join(body_lines).rstrip()
+            }
+
+        chunks = split_into_chunks(content)
+        steps = []
+
+        for index, chunk in enumerate(chunks, start=1):
+            step = parse_chunk(chunk, index)
+            if step is not None:
+                steps.append(step)
+
+        if not steps:
+            return []
+
+        inferred_total = len(steps)
+        for index, step in enumerate(steps, start=1):
+            if step['stepNum'] is None:
+                step['stepNum'] = index
+            if step['totalSteps'] is None:
+                step['totalSteps'] = inferred_total
+            if step['block'] is None:
+                step['block'] = 1
+
         return steps
 
 
