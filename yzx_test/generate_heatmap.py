@@ -167,6 +167,33 @@ class ManualAttentionExtractor:
         )
         return outputs.hidden_states[layer_idx].squeeze(0).float().cpu().numpy()
 
+    @torch.no_grad()
+    def extract_step_average_attention(
+        self,
+        input_ids,
+        attention_mask=None,
+        layer_indices=None,
+    ):
+        outputs = self.base_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+
+        if layer_indices is None:
+            layer_indices = list(range(max(0, self.num_layers - 4), self.num_layers))
+
+        attn_matrices = []
+        for layer_idx in layer_indices:
+            hidden_states = outputs.hidden_states[layer_idx]
+            block = self.blocks[layer_idx]
+            q, k, _ = self.extract_qkv_and_apply_rope(block, hidden_states)
+            attn_weights = self.compute_attention_weights(q, k, attention_mask=attention_mask)
+            attn_matrices.append(attn_weights.mean(dim=1).squeeze(0))
+
+        avg_attention = torch.stack(attn_matrices, dim=0).mean(dim=0)
+        return avg_attention.float().cpu().numpy()
+
 
 @torch.no_grad()
 def generate(
@@ -174,8 +201,8 @@ def generate(
     prompt,
     attention_mask=None,
     steps=128,
-    gen_length=128,
-    block_length=128,
+    gen_length=256,
+    block_length=256,
     temperature=0.0,
     cfg_scale=0.0,
     remasking="low_confidence",
@@ -958,6 +985,195 @@ def plot_attention_heatmap(
     plt.close()
 
 
+def symmetrize_attention_matrix(attention_matrix):
+    attention_matrix = np.asarray(attention_matrix, dtype=np.float64)
+    return 0.5 * (attention_matrix + attention_matrix.T)
+
+
+def identify_attention_sinks(attention_matrix, sink_threshold_std=2.0):
+    attention_matrix = np.asarray(attention_matrix, dtype=np.float64)
+    if attention_matrix.ndim != 2 or attention_matrix.shape[0] == 0:
+        return np.array([], dtype=np.int64), np.array([], dtype=np.float64), 0.0
+
+    incoming_mean = attention_matrix.mean(axis=0)
+    mean_value = float(incoming_mean.mean())
+    std_value = float(incoming_mean.std())
+    threshold = mean_value + sink_threshold_std * std_value
+
+    if std_value < 1e-12:
+        sink_indices = np.array([], dtype=np.int64)
+    else:
+        sink_indices = np.where(incoming_mean > threshold)[0].astype(np.int64)
+
+    return sink_indices, incoming_mean, threshold
+
+
+def filter_sink_tokens(attention_matrix, token_labels, sink_threshold_std=2.0):
+    attention_matrix = np.asarray(attention_matrix, dtype=np.float64)
+    token_labels = list(token_labels)
+
+    sink_indices, incoming_mean, threshold = identify_attention_sinks(
+        attention_matrix,
+        sink_threshold_std=sink_threshold_std,
+    )
+
+    keep_mask = np.ones(attention_matrix.shape[0], dtype=bool)
+    keep_mask[sink_indices] = False
+    filtered_matrix = attention_matrix[np.ix_(keep_mask, keep_mask)]
+    filtered_labels = [label for idx, label in enumerate(token_labels) if keep_mask[idx]]
+
+    return {
+        "filtered_matrix": filtered_matrix,
+        "filtered_labels": filtered_labels,
+        "sink_indices": sink_indices,
+        "sink_labels": [token_labels[idx] for idx in sink_indices.tolist()],
+        "incoming_mean": incoming_mean,
+        "threshold": threshold,
+    }
+
+
+def normalize_selected_steps(selected_steps, total_steps):
+    requested_steps = [int(step) for step in selected_steps]
+    if not requested_steps:
+        return [total_steps]
+
+    if min(requested_steps) < 1:
+        raise ValueError("selected steps must be >= 1")
+
+    max_requested = max(requested_steps)
+    if max_requested <= total_steps:
+        normalized_steps = []
+        for step in requested_steps:
+            if step not in normalized_steps:
+                normalized_steps.append(step)
+        return normalized_steps
+
+    if max_requested == 1:
+        return [1]
+
+    scaled_steps = []
+    for step in requested_steps:
+        scaled = 1 + round((step - 1) * (total_steps - 1) / (max_requested - 1))
+        scaled = min(max(scaled, 1), total_steps)
+        if scaled not in scaled_steps:
+            scaled_steps.append(scaled)
+    return scaled_steps
+
+
+def save_selected_step_average_attention_heatmaps(
+    model,
+    tokenizer,
+    generation_history,
+    attention_mask,
+    prompt_length,
+    output_dir,
+    prefix="generated",
+    max_tokens=80,
+    num_avg_layers=4,
+    selected_steps=None,
+    sink_threshold_std=2.0,
+):
+    extractor = ManualAttentionExtractor(model)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if not generation_history:
+        return
+
+    layer_indices = list(range(max(0, extractor.num_layers - num_avg_layers), extractor.num_layers))
+    total_steps = len(generation_history)
+    if selected_steps is None:
+        selected_steps = [1, total_steps]
+    selected_steps = normalize_selected_steps(selected_steps, total_steps)
+
+    for step_idx in selected_steps:
+        sequence_ids = generation_history[step_idx - 1].to(model.device)
+        token_ids = sequence_ids[0].detach().cpu().tolist()
+        token_texts = decode_token_texts(tokenizer, token_ids)
+        token_labels = format_token_labels(token_texts)
+        response_labels = token_labels[prompt_length:]
+
+        if len(response_labels) == 0:
+            continue
+
+        avg_attention = extractor.extract_step_average_attention(
+            input_ids=sequence_ids,
+            attention_mask=attention_mask,
+            layer_indices=layer_indices,
+        )
+        response_attention = np.asarray(
+            avg_attention[prompt_length:, prompt_length:],
+            dtype=np.float64,
+        )
+
+        if response_attention.size == 0:
+            continue
+
+        sink_filtered_raw = filter_sink_tokens(
+            response_attention,
+            response_labels,
+            sink_threshold_std=sink_threshold_std,
+        )
+        filtered_interaction_input = sink_filtered_raw["filtered_matrix"]
+        filtered_labels = sink_filtered_raw["filtered_labels"]
+
+        if filtered_interaction_input.size == 0 or len(filtered_labels) == 0:
+            continue
+
+        interaction_score = symmetrize_attention_matrix(filtered_interaction_input)
+        file_prefix = f"{prefix}_step_{step_idx:03d}_last{len(layer_indices)}layers_avg"
+
+        np.save(output_dir / f"{file_prefix}_raw_attention.npy", response_attention)
+        np.save(output_dir / f"{file_prefix}_sink_filtered_attention.npy", filtered_interaction_input)
+        np.save(output_dir / f"{file_prefix}_interaction.npy", interaction_score)
+        with open(output_dir / f"{file_prefix}_sink_filter.txt", "w", encoding="utf-8") as f:
+            f.write(f"step={step_idx}\n")
+            f.write(f"sink_threshold_std={sink_threshold_std}\n")
+            f.write(f"sink_threshold={sink_filtered_raw['threshold']:.6f}\n")
+            f.write(f"num_filtered={len(sink_filtered_raw['sink_indices'])}\n")
+            for idx, label in zip(
+                sink_filtered_raw["sink_indices"].tolist(),
+                sink_filtered_raw["sink_labels"],
+            ):
+                f.write(
+                    f"idx={idx} token={label!r} incoming_mean={sink_filtered_raw['incoming_mean'][idx]:.6f}\n"
+                )
+
+        plot_attention_heatmap(
+            attention_matrix=response_attention,
+            token_labels=response_labels,
+            output_path=output_dir / f"{file_prefix}_raw_attention.png",
+            title=(
+                f"Step {step_idx} Raw Attention "
+                f"(avg last {len(layer_indices)} layers, avg all heads)"
+            ),
+            max_tokens=max_tokens,
+            start_idx=0,
+        )
+        plot_attention_heatmap(
+            attention_matrix=filtered_interaction_input,
+            token_labels=filtered_labels,
+            output_path=output_dir / f"{file_prefix}_sink_filtered_attention.png",
+            title=(
+                f"Step {step_idx} Sink-Filtered Attention "
+                f"(avg last {len(layer_indices)} layers, avg all heads)"
+            ),
+            max_tokens=max_tokens,
+            start_idx=0,
+        )
+        plot_attention_heatmap(
+            attention_matrix=interaction_score,
+            token_labels=filtered_labels,
+            output_path=output_dir / f"{file_prefix}_interaction.png",
+            title=(
+                f"Step {step_idx} Symmetrized Interaction "
+                f"(sink-filtered, avg last {len(layer_indices)} layers, avg all heads)"
+            ),
+            max_tokens=max_tokens,
+            start_idx=0,
+        )
+
+
 def save_manual_attention_heatmaps(
     model,
     tokenizer,
@@ -1017,11 +1233,19 @@ def parse_args():
     parser.add_argument("--model-path", type=str, default="/data/labshare/Param/llada/")
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--gen-length", type=int, default=128)
-    parser.add_argument("--steps", type=int, default=32)
-    parser.add_argument("--block-length", type=int, default=32)
+    parser.add_argument("--steps", type=int, default=128)
+    parser.add_argument("--block-length", type=int, default=128)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--cfg-scale", type=float, default=0.0)
     parser.add_argument("--layers", type=int, nargs="+", default=[0, 1, 30, 31])
+    parser.add_argument("--step-avg-last-layers", type=int, default=4)
+    parser.add_argument(
+        "--selected-heatmap-steps",
+        type=int,
+        nargs="+",
+        default=[1, 32, 64, 96, 128],
+    )
+    parser.add_argument("--sink-threshold-std", type=float, default=2.0)
     parser.add_argument("--max-plot-tokens", type=int, default=512)
     parser.add_argument("--summary-top-k", type=int, default=30)
     parser.add_argument("--structure-layer", type=int, default=None)
@@ -1164,17 +1388,18 @@ def main():
         dim=-1,
     )
 
-    save_manual_attention_heatmaps(
+    save_selected_step_average_attention_heatmaps(
         model=model,
         tokenizer=tokenizer,
-        sequence_ids=out,
+        generation_history=generation_history,
         attention_mask=final_attention_mask,
         prompt_length=input_ids.shape[1],
-        layers=args.layers,
-        output_dir=args.heatmap_dir,
+        output_dir=Path(args.heatmap_dir),
         prefix="generated",
         max_tokens=args.max_plot_tokens,
-        summary_top_k=args.summary_top_k,
+        num_avg_layers=args.step_avg_last_layers,
+        selected_steps=args.selected_heatmap_steps,
+        sink_threshold_std=args.sink_threshold_std,
     )
 
     structure_layer = args.structure_layer

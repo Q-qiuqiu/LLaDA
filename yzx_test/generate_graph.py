@@ -300,7 +300,7 @@ class LLaDAAttentionExtractor:
         tau_max=0.05,
         late_conf_threshold=0.9,
         save_intermediate: bool = True,
-        output_file: str = "dapd_generation_log.txt",
+        output_file: str = "dapd_generation_agent_log.txt",
     ):
         """
         DAPD decoding:
@@ -633,7 +633,8 @@ def process_batch_examples(
     #             continue
 
     # os.makedirs(output_dir, exist_ok=True)
-    query = """You are a coordinator agent responsible for decomposing a complex task into sub-tasks and assigning them to specialized agents.
+    query = """ 
+    You are a coordinator agent responsible for decomposing a complex task into sub-tasks and assigning them to specialized agents.
 
     You have access to the following three agents:
 
@@ -714,7 +715,7 @@ def process_batch_examples(
             # output_path = os.path.join(
             #     output_dir, f"{example_id}_attentions.npz"
             # )
-            extractor.save_attentions(result, output_path)
+            #extractor.save_attentions(result, output_path)
 
         except Exception as e:
             print(f"Error processing {example_id}: {e}")
