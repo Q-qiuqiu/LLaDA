@@ -214,7 +214,7 @@ def main():
     input_ids = encoded_outputs['input_ids'].to(device)
     attention_mask = encoded_outputs['attention_mask'].to(device)
 
-    out = generate(model, input_ids, attention_mask, steps=128, gen_length=1024, block_length=256, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log_128_128_128.txt")
+    out = generate(model, input_ids, attention_mask, steps=128, gen_length=512, block_length=512, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log.txt")
     output = tokenizer.batch_decode(out[:, input_ids.shape[1]:], skip_special_tokens=True)
     for o in output:
         print(o)
