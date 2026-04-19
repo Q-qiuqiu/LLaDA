@@ -445,6 +445,9 @@ class LLaDAValueRecorder:
         block_length: int = 512,
         temperature: float = 0.0,
         cfg_scale: float = 0.0,
+        remasking: str = "low_confidence",
+        logits_eos_inf: bool = True,
+        confidence_eos_eot_inf: bool = True,
         capture_steps: int = 5,
         capture_start_step: int = 1,
         capture_end_step: Optional[int] = None,
@@ -527,12 +530,31 @@ class LLaDAValueRecorder:
                     attention_mask=attention_mask,
                 )
 
+                if logits_eos_inf:
+                    logits[:, :, 126081] = -torch.inf
+
                 probs = F.softmax(logits, dim=-1)
                 top_confidence, top_token_ids = torch.max(probs, dim=-1)
 
                 logits_with_noise = add_gumbel_noise(logits, temperature=temperature)
                 x0 = torch.argmax(logits_with_noise, dim=-1)
-                x0_p = torch.squeeze(torch.gather(probs, dim=-1, index=torch.unsqueeze(x0, -1)), -1)
+
+                if confidence_eos_eot_inf:
+                    logits_with_noise[:, :, 126081] = -torch.inf
+                    if logits_with_noise.shape[-1] > 126348:
+                        logits_with_noise[:, :, 126348] = -torch.inf
+
+                if remasking == "low_confidence":
+                    x0_p = torch.squeeze(torch.gather(probs, dim=-1, index=torch.unsqueeze(x0, -1)), -1)
+                    if confidence_eos_eot_inf:
+                        x0_p = x0_p.clone()
+                        x0_p[x0 == 126081] = -torch.inf
+                        if logits_with_noise.shape[-1] > 126348:
+                            x0_p[x0 == 126348] = -torch.inf
+                elif remasking == "random":
+                    x0_p = torch.rand((x0.shape[0], x0.shape[1]), device=x0.device)
+                else:
+                    raise NotImplementedError(remasking)
 
                 x0_p[:, block_end:] = -np.inf
                 x0 = torch.where(mask_index, x0, x)
@@ -749,27 +771,54 @@ class LLaDAValueRecorder:
 
 def main():
     prompt =""" 
-        [
-      {
-        "role": "system",
-        "content": "You are a helpful assistant to make travel plans for Bob.\n\nEXTERNAL RESOURCES:\n1. A database containing information about train tickets, attractions, and city transportation.\n2. A python notebook to execute python code for numerical operations and planning. \n\nTASK DESCRIPTION\nYou need to make a travel plan based on the given requirements, taking into account transportation between cities and daily schedules.\nThe final travel plan may include or be part of the following:\n1.go_to_place(origin:str,destination:str,departure_time,arrival_time): go to destination from origin. The origin and destination should be the name of a hotel or a spot instead of a city.\n2.visit(place:str,begin_time,end_time): visit somewhere from begin_time to end_time. The time should be expressed as \"%Y-%m-%d %H:%M\", e.g. 2023-07-02 16:00. You have to go somewhere before you can visit it.\n3.go_to_city(origin_city:str,destination_city:str,departure_time,arrival_time,ticket_number): go to destination city from origin city, using the ticket with the ticket_number(you can know the ticket number from the database).\n4.stay_in(city:str,begin_time,end_time): stay in somewhere from begin_time to end_time. The time should be expressed as \"%Y-%m-%d %H:%M\". Only when Bob is in some city can he visit it.\ne.g. \n<plan>go_to_place(\"Beijing Railway Hotel\",\"The Great Wall\",\"2023-07-02 7:00\",\"2023-07-02 8:05\")</plan>, <plan>visit(\"The Great Wall\",\"2023-07-02 8:05\",\"2023-07-05 17:00\")</plan>,<plan>go_to_city(\"Shanghai\",\"Beijing\",\"2023-07-02 16:00\",\"2023-07-02 22:30\",\"D1111\")</plan>, <plan>stay_in(\"Beijing\",\"2023-07-02 22:30\",\"2023-07-05 8:00\")</plan>\nYour ultimate goal is to give these plans, there is no need to do anything extra.\n\n--- Your Workflow ---\n1. You will first be given a task.\n2. You should understand the task and devise a plan to complete the task. This plan will contain a series of subtasks that need to be completed.\n\nPLAN AND SUBTASK:\nIf the task cannot be easily solved directly or requires the use of external resources, please assign it to another agent to complete (such as \"find the cheapest train from Beijing to Shanghai in 2023-7-1\"), otherwise you can complete it yourself. You may need to wait for results from other agents before proceeding to the next step of the task. If you need help from other agents, please clearly describe the task objectives, background, and precautions of the subtask. \nA subtask-structure has the following json component and surrounded with <subtask></subtask> as follows:\n<subtask>{\n\"subtask_name\": string, name of the subtask\n\"goal\": string, the main purpose of the subtask, and what will you do to reach this goal?\n\"criticism\": string, what potential problems may the current subtask and goal have?\n\"milestones\": list[string]. what milestones should be achieved to ensure the subtask is done? Make it detailed and specific.\n\"result_format\": optional, what the result should be.}</subtask>\n\n"
-      },
-      {
-        "role": "system",
-        "name": "example_user",
-        "content": "Task Requirements: Bob is in Shanghai and going to travel in several cities, please make a ticket purchase plan and travel sequence for him.The demands are as follows:\n1. visit ['Beijing']. The order doesn't matter and he needs to return to Shanghai finally.\n2. He is free to travel from 2023.7.1 to 2023.7.20. The budget for transportation is 1000.0 CNY.\n3. Play at least 3 days in Beijing.\n4. If you arrive in a city before 12:00 noon, that day can be counted as a day of play. If it's past 12 o'clock, it doesn't count as a day.\n5. On the basis of completing the above conditions (especially the budget), spend as little time as possible.\n"
-      },
-      {
-        "role": "system",
-        "name": "example_assistant",
-        "content": "Based on the requirements, we can know that Bob need to go to Beijing from Shanghai, stay in Beijing for 3 days and then go to Shanghai from Beijing.\nGiven the task, the first step is to find available train tickets that fit Bob's schedule and budget.\n<subtask>\n{\n\"subtask_name\": \"find_available_train_tickets\",\n\"goal\": \"Find train tickets from Shanghai to Beijing and back to Shanghai that fit within the travel dates, budget, and allow for at least 3 full days of play in Beijing. If the arrival is before 12:00 noon, it counts as a day of play.\",\n\"criticism\": \"Must ensure that the total cost of the round trip tickets does not exceed the budget of 1000.0 CNY and that the timings allow for at least 3 full days in Beijing for visit. So you need to allow time between train rides(arrival in a city and departure from the city). For each ticket, you must give me the ticket number, origin, destination, departure time, arrival time and the price.\",\n\"milestones\": [\"Identify a suitable train from Shanghai to Beijing.\", \"Identify a return train from Beijing to Shanghai ensuring at least 3 days in Beijing before departing.\", \"Ensure the total cost of both tickets is within the budget of 1000.0 CNY.\"]\n}\n</subtask>\nThen we can get the final plan consists of go_to_city and stay_in.\n<subtask>\n{\n\"subtask_name\": \"get the final plan\",\n\"goal\": \"Formulate a travel plan for Bob's trip from Shanghai to Beijing and back, ensuring it fits within his budget and time constraints, including at least 3 full days in Beijing.\",\n\"criticism\": \"The plan must be concise, focusing on efficient travel and stay arrangements while adhering to the budget and time constraints.\",\n\"milestones\": [\"Include suitable train journeys within the budget.\",\"Plan at least 3 full days in Beijing.\",\"Ensure the overall plan fits within the specified dates and budget.\"],\n\"result_format\": \"A schedule consisting with multiple <plan>go_to_place(...)</plan> and <plan>visit(...)</plan>.    1.go_to_place(origin:str,destination:str,departure_time,arrival_time): go to destination from origin.     2.visit(place:str,begin_time,end_time): visit somewhere from begin_time to end_time. The time should be expressed as %Y-%m-%d %H:%M, e.g. 2023-07-02 16:00.\"\n}\n</subtask>\n"
-      },
-      {
-        "role": "user",
-        "content": "Task Requirements:\nBob is in Beijing and going to travel in several cities, please make a ticket purchase plan and travel sequence for him.The demands are as follows:\n1. visit ['Chengdu']. The order doesn't matter and he needs to return to Beijing finally.\n2. He is free to travel from 2023.7.1 to 2023.7.20. The budget for transportation is 1800.0 CNY.\n3. Play at least 1 day in Chengdu.\n4. Stay in any city for a minimum of 24 hours to count as one day.\n5. On the basis of completing the above conditions (especially the budget), spend as little time as possible.\nCome up with an abstract plan to perform this task in a couple of steps. Give me the subtasks between <subtask> and </subtask>."
-      }
-    ]
+    You are a coordinator agent responsible for decomposing a complex task into sub-tasks and assigning them to specialized agents.
+
+    You have access to the following three agents:
+
+    1. ResearchAgent
+
+    * Description: Responsible for retrieving relevant background information, facts, and references from knowledge sources.
+    * Input: query (string)
+    * Output: concise factual summary
+
+    2. PlanningAgent
+
+    * Description: Responsible for creating structured plans, step-by-step strategies, or workflows.
+    * Input: objective (string), context (string)
+    * Output: ordered list of steps
+
+    3. CodingAgent
+
+    * Description: Responsible for writing code or performing calculations based on given specifications.
+    * Input: specification (string)
+    * Output: code snippet or computed result
+
+    Task:
+    "I want to build a simple web app that recommends books based on user preferences. It should include a recommendation algorithm and a basic UI."
+
+    Your job:
+    1. Analyze the task
+    2. Decompose it into sub-tasks
+    3. Assign each sub-task to the most appropriate agent
+
+    Output format (STRICT):
+    Produce a list of agent calls. Each call must be independent and follow this structure:
+    <subtask>{
+    name: <AgentName>
+    arguments: <key>: <value>
+    ...
+    }</subtask>
+    ---
+
+    Requirements:
+
+    * You MUST produce exactly three agent calls (one per agent)
+    * Each agent call should correspond to a distinct sub-task
+    * Keep arguments concise but sufficient for execution
+    * Ensure that the three agent calls are logically independent (can be executed in parallel)
+    ---
     """
+    
     parser = argparse.ArgumentParser(description="Record first denoising-step values from LLaDA generation.")
     parser.add_argument("--model-path", type=str, default="/data/labshare/Param/llada/")
     parser.add_argument("--device", type=str, default="cuda")
@@ -792,6 +841,22 @@ def main():
     )
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--cfg-scale", type=float, default=0.0)
+    parser.add_argument(
+        "--remasking",
+        type=str,
+        default="low_confidence",
+        choices=["low_confidence", "random"],
+    )
+    parser.add_argument("--logits-eos-inf", action="store_true")
+    parser.add_argument("--no-logits-eos-inf", action="store_false", dest="logits_eos_inf")
+    parser.add_argument("--confidence-eos-eot-inf", action="store_true")
+    parser.add_argument(
+        "--no-confidence-eos-eot-inf",
+        action="store_false",
+        dest="confidence_eos_eot_inf",
+    )
+    parser.add_argument("--use-chat-template", action="store_true")
+    parser.add_argument("--no-use-chat-template", action="store_false", dest="use_chat_template")
     parser.add_argument("--save-intermediate", action="store_true")
     parser.add_argument("--stability-lambda", type=float, default=1.0)
     parser.add_argument("--local-beta", type=float, default=0.05)
@@ -818,13 +883,31 @@ def main():
         type=str,
         default="/home/yzx/LLaDA/yzx_test/value_outputs/denoise_value",
     )
-    parser.set_defaults(save_intermediate=True)
+    parser.set_defaults(
+        save_intermediate=True,
+        logits_eos_inf=True,
+        confidence_eos_eot_inf=True,
+        use_chat_template=True,
+    )
     args = parser.parse_args()
 
     recorder = LLaDAValueRecorder(model_path=args.model_path, device=args.device)
 
-    input_text = f"Question: {args.prompt}\nAnswer:"
-    inputs = recorder.tokenizer(input_text, return_tensors="pt").to(args.device)
+    if args.use_chat_template:
+        messages = [{"role": "user", "content": args.prompt}]
+        input_text = recorder.tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+        inputs = recorder.tokenizer(
+            input_text,
+            add_special_tokens=False,
+            return_tensors="pt",
+        ).to(args.device)
+    else:
+        input_text = f"Question: {args.prompt}\nAnswer:"
+        inputs = recorder.tokenizer(input_text, return_tensors="pt").to(args.device)
 
     record = recorder.generate_and_record_values(
         prompt=inputs.input_ids,
@@ -833,6 +916,9 @@ def main():
         block_length=args.block_length,
         temperature=args.temperature,
         cfg_scale=args.cfg_scale,
+        remasking=args.remasking,
+        logits_eos_inf=args.logits_eos_inf,
+        confidence_eos_eot_inf=args.confidence_eos_eot_inf,
         capture_steps=args.capture_steps,
         capture_start_step=args.capture_start_step,
         capture_end_step=args.capture_end_step,

@@ -211,20 +211,50 @@ def build_line_units(tokens: Sequence[str], keep_mask: np.ndarray) -> List[List[
     return merge_structural_units(units, tokens)
 
 
+def is_structural_shell_text(text: str) -> bool:
+    text = text.strip()
+    if not text:
+        return True
+    if len(text) <= 8 or text in {"<subtask>", "</subtask>", "{", "}", "}}"}:
+        return True
+    if "<subtask>" in text and '"' not in text and ":" not in text:
+        return True
+    if "</subtask>" in text and '"' not in text and ":" not in text:
+        return True
+    return False
+
+
+def is_closing_structural_shell_text(text: str) -> bool:
+    text = text.strip()
+    if not text:
+        return False
+    if text in {"}", "}}", "</subtask>"}:
+        return True
+    if "</subtask>" in text and '"' not in text and ":" not in text:
+        return True
+    if text.endswith("}") and '"' not in text and ":" not in text:
+        return True
+    return False
+
+
 def merge_structural_units(units: Sequence[Sequence[int]], tokens: Sequence[str]) -> List[List[int]]:
     merged: List[List[int]] = []
     for unit in units:
         text = "".join(_clean_token(tokens[idx]) for idx in unit).strip()
-        is_structural = len(text) <= 8 or text in {"<subtask>", "</subtask>", "{", "}", "}}"}
-        if is_structural and merged:
+        is_structural = is_structural_shell_text(text)
+        if is_structural and is_closing_structural_shell_text(text) and merged:
             merged[-1].extend(unit)
         else:
             merged.append(list(unit))
-    if len(merged) >= 2:
-        first_text = "".join(_clean_token(tokens[idx]) for idx in merged[0]).strip()
-        if first_text in {"<subtask>", "{", "<subtask>{"} or len(first_text) <= 8:
-            merged[1] = merged[0] + merged[1]
-            merged = merged[1:]
+
+    idx = 0
+    while idx < len(merged) - 1:
+        text = "".join(_clean_token(tokens[token_idx]) for token_idx in merged[idx]).strip()
+        if is_structural_shell_text(text) and not is_closing_structural_shell_text(text):
+            merged[idx + 1] = merged[idx] + merged[idx + 1]
+            del merged[idx]
+            continue
+        idx += 1
     return merged
 
 
