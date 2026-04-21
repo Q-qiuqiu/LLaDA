@@ -374,22 +374,73 @@ def save_block_text(output_path: str, unit_texts: Sequence[str], blocks: Sequenc
         f.write("\n".join(lines).rstrip() + "\n")
 
 
-def build_heatmap_html(unit_adj: np.ndarray, labels: np.ndarray) -> str:
+def block_color(label: int) -> str:
+    palette = [
+        "#dbeafe",
+        "#dcfce7",
+        "#fef3c7",
+        "#fce7f3",
+        "#ede9fe",
+        "#ffe4e6",
+        "#e0f2fe",
+        "#ecfccb",
+    ]
+    return palette[int(label) % len(palette)]
+
+
+def _mix_hex_colors(base_hex: str, accent_hex: str, weight: float) -> str:
+    weight = max(0.0, min(1.0, float(weight)))
+    base = tuple(int(base_hex[i : i + 2], 16) for i in (1, 3, 5))
+    accent = tuple(int(accent_hex[i : i + 2], 16) for i in (1, 3, 5))
+    mixed = tuple(int(round((1.0 - weight) * b + weight * a)) for b, a in zip(base, accent))
+    return "#" + "".join(f"{channel:02x}" for channel in mixed)
+
+
+def build_heatmap_html(
+    unit_adj: np.ndarray,
+    labels: np.ndarray,
+    boundaries: Sequence[int],
+    blocks: Sequence[Tuple[int, int, int]],
+) -> str:
     vmax = float(np.max(unit_adj))
     scale = vmax if vmax > 1e-12 else 1.0
-    cells: List[str] = []
+    boundary_after = set(int(x) for x in boundaries)
+    block_ranges = {int(label): (int(start), int(end)) for start, end, label in blocks}
+    rows: List[str] = []
     for i in range(unit_adj.shape[0]):
-        row_cells = []
+        row_cells: List[str] = []
         for j in range(unit_adj.shape[1]):
             value = float(unit_adj[i, j])
             norm = max(0.0, min(1.0, value / scale))
-            alpha = 0.08 + 0.92 * norm
-            border = " boundary" if labels[i] != labels[j] else ""
+            same_block = labels[i] == labels[j]
+            base_color = "#f8fafc" if not same_block else block_color(int(labels[i]))
+            fill_color = _mix_hex_colors(base_color, "#0f766e", 0.12 + 0.78 * norm)
+
+            classes = ["heat"]
+            if not same_block:
+                classes.append("cross-block")
+            if (j + 1) in boundary_after:
+                classes.append("boundary-col")
+            if (i + 1) in boundary_after:
+                classes.append("boundary-row")
+
+            start, end = block_ranges[int(labels[i])]
+            styles = [f"background: {fill_color}"]
+            if same_block and i == start:
+                styles.append("border-top: 3px solid #111827")
+            if same_block and i == end - 1:
+                styles.append("border-bottom: 3px solid #111827")
+            if same_block and j == start:
+                styles.append("border-left: 3px solid #111827")
+            if same_block and j == end - 1:
+                styles.append("border-right: 3px solid #111827")
+
             row_cells.append(
-                f'<td class="heat{border}" style="background: rgba(25,118,210,{alpha:.3f})" title="{value:.6g}">{value:.3g}</td>'
+                f'<td class="{" ".join(classes)}" style="{"; ".join(styles)}" '
+                f'title="u{i + 1} ↔ u{j + 1} | value={value:.6g} | same_block={same_block}">{value:.3g}</td>'
             )
-        cells.append("<tr>" + "".join(row_cells) + "</tr>")
-    return "\n".join(cells)
+        rows.append("<tr>" + "".join(row_cells) + "</tr>")
+    return "\n".join(rows)
 
 
 def save_html_report(
@@ -406,10 +457,11 @@ def save_html_report(
     boundary_set = set(int(x) for x in boundaries)
     for idx, (seq_idx, text, span, label) in enumerate(zip(unit_seq, unit_texts, spans, labels), start=1):
         marker = "Yes" if idx in boundary_set else ""
+        label_bg = block_color(int(label))
         unit_rows.append(
             "<tr>"
             f"<td>{idx}</td>"
-            f"<td>{int(label)}</td>"
+            f'<td style="background: {label_bg}; font-weight: 700;">{int(label)}</td>'
             f"<td>{marker}</td>"
             f"<td>{int(seq_idx)}</td>"
             f"<td>{span[0] + 1}-{span[1] + 1}</td>"
@@ -421,7 +473,7 @@ def save_html_report(
     for block_id, (start, end, label) in enumerate(blocks, start=1):
         text = render_block_text(unit_texts, start, end)
         block_cards.append(
-            '<section class="block-card">'
+            f'<section class="block-card" style="border-top: 8px solid {block_color(int(label))};">'
             f"<h3>Block {block_id}</h3>"
             f"<p>label={int(label)} | units={start + 1}-{end} | tokens={spans[start][0] + 1}-{spans[end - 1][1] + 1}</p>"
             f"<pre>{html.escape(text)}</pre>"
@@ -429,23 +481,17 @@ def save_html_report(
         )
 
     header_cells = "".join(f"<th>{i}</th>" for i in range(1, unit_adj.shape[0] + 1))
+    heatmap_rows = build_heatmap_html(unit_adj, labels, boundaries, blocks)
     row_headers = "\n".join(
-        f"<tr><th>{i}</th>{row}</tr>"
-        for i, row in enumerate(
-            [
-                "".join(
-                    [
-                        f'<td class="heat{" boundary" if labels[i] != labels[j] else ""}" '
-                        f'style="background: rgba(25,118,210,{0.08 + 0.92 * max(0.0, min(1.0, float(unit_adj[i, j]) / max(float(np.max(unit_adj)), 1e-12))):.3f})" '
-                        f'title="{float(unit_adj[i, j]):.6g}">{float(unit_adj[i, j]):.3g}</td>'
-                        for j in range(unit_adj.shape[1])
-                    ]
-                )
-                for i in range(unit_adj.shape[0])
-            ],
-            start=1,
-        )
+        f'<tr><th style="background: {block_color(int(labels[i]))};">{i + 1}</th>{row}</tr>'
+        for i, row in enumerate(heatmap_rows.splitlines())
     )
+    legend_items = "".join(
+        f'<span class="legend-item"><span class="legend-swatch" style="background: {block_color(int(label))};"></span>'
+        f'Block {block_id} (label={int(label)}, units={start + 1}-{end})</span>'
+        for block_id, (start, end, label) in enumerate(blocks, start=1)
+    )
+    boundary_text = ", ".join(str(x) for x in boundaries) or "None"
 
     html_doc = f"""<!doctype html>
 <html lang="en">
@@ -460,18 +506,27 @@ def save_html_report(
     th, td {{ border: 1px solid #d8e0ea; padding: 6px 8px; vertical-align: top; }}
     th {{ background: #eef3f8; position: sticky; top: 0; }}
     pre {{ white-space: pre-wrap; word-break: break-word; margin: 0; }}
-    .matrix-wrap {{ overflow: auto; max-width: 100%; border: 1px solid #d8e0ea; background: white; }}
-    .heat {{ min-width: 44px; text-align: right; }}
-    .boundary {{ box-shadow: inset 0 0 0 2px #d32f2f; }}
+    .matrix-wrap {{ overflow: auto; max-width: 100%; border: 1px solid #d8e0ea; background: white; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }}
+    .heat {{ min-width: 48px; text-align: right; font-size: 12px; transition: transform 0.08s ease; }}
+    .heat:hover {{ transform: scale(1.08); position: relative; z-index: 2; }}
+    .cross-block {{ color: #475569; }}
+    .boundary-row {{ border-top: 3px dashed #dc2626 !important; }}
+    .boundary-col {{ border-left: 3px dashed #dc2626 !important; }}
     .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }}
-    .block-card {{ background: white; border: 1px solid #d8e0ea; padding: 16px; }}
+    .block-card {{ background: white; border: 1px solid #d8e0ea; padding: 16px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); }}
     .meta {{ background: white; border: 1px solid #d8e0ea; padding: 12px 16px; }}
+    .legend {{ display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; }}
+    .legend-item {{ display: inline-flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #d8e0ea; padding: 6px 10px; }}
+    .legend-swatch {{ width: 18px; height: 18px; display: inline-block; border: 1px solid #94a3b8; }}
+    .note {{ color: #475569; margin-top: 10px; }}
   </style>
 </head>
 <body>
   <section class="meta">
     <h1>Response Block Visualization</h1>
-    <p>Units: {len(unit_texts)} | Blocks: {len(blocks)} | Boundaries after units: {", ".join(str(x) for x in boundaries) or "None"}</p>
+    <p>Units: {len(unit_texts)} | Blocks: {len(blocks)} | Boundaries after units: {boundary_text}</p>
+    <div class="legend">{legend_items}</div>
+    <p class="note">Heat color gets stronger as unit-to-unit affinity increases. Dashed red guides mark chosen cut boundaries. Thick dark square edges outline each final block on the heatmap diagonal.</p>
   </section>
   <section>
     <h2>Unit Graph Heatmap</h2>
