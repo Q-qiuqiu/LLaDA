@@ -6,3 +6,4 @@ __pycache__/
 *.xlsx
 *.json
 blocks_structure.html
+blocks_structure_*.html
