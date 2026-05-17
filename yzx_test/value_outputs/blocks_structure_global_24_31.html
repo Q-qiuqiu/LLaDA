@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Response Block Visualization</title>
+  <style>
+    body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 24px; color: #17212b; background: #f6f8fb; }
+    h1, h2, h3 { margin: 0 0 12px; }
+    section { margin: 0 0 28px; }
+    table { border-collapse: collapse; background: white; }
+    th, td { border: 1px solid #d8e0ea; padding: 6px 8px; vertical-align: top; }
+    th { background: #eef3f8; position: sticky; top: 0; }
+    pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
+    .matrix-wrap { overflow: auto; max-width: 100%; border: 1px solid #d8e0ea; background: white; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06); }
+    .heat { min-width: 48px; text-align: right; font-size: 12px; transition: transform 0.08s ease; }
+    .heat:hover { transform: scale(1.08); position: relative; z-index: 2; }
+    .cross-block { color: #475569; }
+    .boundary-row { border-top: 3px dashed #dc2626 !important; }
+    .boundary-col { border-left: 3px dashed #dc2626 !important; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+    .block-card { background: white; border: 1px solid #d8e0ea; padding: 16px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); }
+    .meta { background: white; border: 1px solid #d8e0ea; padding: 12px 16px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #d8e0ea; padding: 6px 10px; }
+    .legend-swatch { width: 18px; height: 18px; display: inline-block; border: 1px solid #94a3b8; }
+    .note { color: #475569; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <section class="meta">
+    <h1>Response Block Visualization</h1>
+    <p>Units: 1 | Blocks: 1 | Boundaries after units: None</p>
+    <div class="legend"><span class="legend-item"><span class="legend-swatch" style="background: #dbeafe;"></span>Block 1 (label=0, units=1-1)</span></div>
+    <p class="note">Heat color gets stronger as unit-to-unit affinity increases. Dashed red guides mark chosen cut boundaries. Thick dark square edges outline each final block on the heatmap diagonal.</p>
+  </section>
+  <section>
+    <h2>Unit Graph Heatmap</h2>
+    <div class="matrix-wrap">
+      <table>
+        <tr><th>u</th><th>1</th></tr>
+        <tr><th style="background: #dbeafe;">1</th><tr><td class="heat" style="background: #23827c; border-top: 3px solid #111827; border-bottom: 3px solid #111827; border-left: 3px solid #111827; border-right: 3px solid #111827" title="u1 ↔ u1 | value=0.000124332 | same_block=True">0.000124</td></tr></tr>
+      </table>
+    </div>
+  </section>
+  <section>
+    <h2>Units</h2>
+    <table>
+      <tr><th>Unit</th><th>Label</th><th>Boundary After</th><th>Seq Idx</th><th>Token Span</th><th>Text</th></tr>
+      <tr><td>1</td><td style="background: #dbeafe; font-weight: 700;">0</td><td></td><td>1912</td><td>1-510</td><td><pre>&lt;subtask&gt;{&quot;subtask_name&quot;: &quot;find_available_train_tickets&quot;,&quot;goal&quot;: &quot;Find train tickets from Guangzhou to Beijing and back to to that that that the travel dates,,,,, for for least days days days play play play.. the the is is0000,, as as as as of play play&quot;criticism &quot; &quot;MustMust that the the the of the round trip does does does does does the of0000000NYNY0 the the the for for days in in for for for for for for to in time between train rides ridesrival in city city departure departure departure departure departure,,,,,,, me me,,,,,,,,,,,,, andmilmilmilmilmilestonesestonesestonesestonesestones train from train train train to to toEnsure to from from toEnsure toEnsureEnsureEnsure of of of of of of of0 of00000000000000000subsubsubsubsubsubsubsubsubsubsubsub_name_name_name_name_name_name to to to to to to and to to,, and, and and and and and and and and and and and and and and and and and,, and and and and and and and,, and and and and and and and.&quot;,.&quot;,critic be be the focusing, and be,, focusing focusing the the and the to.&quot;,.&quot;, to the budget and time budget train the trainestones train [&quot; least train train journeys in budget..&quot;,&quot;Plan at least3 days in Chengdu.&quot;,&quot;Ensure the overall plan fits within the specified dates and budget.&quot;],&quot;result_format&quot;: &quot;A schedule consisting with multiple &lt;plan&gt;go_to_place(...)&lt;/plan&gt; and &lt;plan&gt;visit(...)&lt;/plan&gt;.1.go_to_place(origin:str,destinationstr,departure_time,arrival_time): go to destination from origin.2.visit(place:str,begin,end): visit somewhere from begin to end_time The time should expressed as %YmdHM,.g.2023-07-02160.&quot;}&lt;/subtask&gt;</pre></td></tr>
+    </table>
+  </section>
+  <section>
+    <h2>Blocks</h2>
+    <div class="grid">
+      <section class="block-card" style="border-top: 8px solid #dbeafe;"><h3>Block 1</h3><p>label=0 | units=1-1 | tokens=1-510</p><pre>&lt;subtask&gt;{&quot;subtask_name&quot;: &quot;find_available_train_tickets&quot;,&quot;goal&quot;: &quot;Find train tickets from Guangzhou to Beijing and back to to that that that the travel dates,,,,, for for least days days days play play play.. the the is is0000,, as as as as of play play&quot;criticism &quot; &quot;MustMust that the the the of the round trip does does does does does the of0000000NYNY0 the the the for for days in in for for for for for for to in time between train rides ridesrival in city city departure departure departure departure departure,,,,,,, me me,,,,,,,,,,,,, andmilmilmilmilmilestonesestonesestonesestonesestones train from train train train to to toEnsure to from from toEnsure toEnsureEnsureEnsure of of of of of of of0 of00000000000000000subsubsubsubsubsubsubsubsubsubsubsub_name_name_name_name_name_name to to to to to to and to to,, and, and and and and and and and and and and and and and and and and and,, and and and and and and and,, and and and and and and and.&quot;,.&quot;,critic be be the focusing, and be,, focusing focusing the the and the to.&quot;,.&quot;, to the budget and time budget train the trainestones train [&quot; least train train journeys in budget..&quot;,&quot;Plan at least3 days in Chengdu.&quot;,&quot;Ensure the overall plan fits within the specified dates and budget.&quot;],&quot;result_format&quot;: &quot;A schedule consisting with multiple &lt;plan&gt;go_to_place(...)&lt;/plan&gt; and &lt;plan&gt;visit(...)&lt;/plan&gt;.1.go_to_place(origin:str,destinationstr,departure_time,arrival_time): go to destination from origin.2.visit(place:str,begin,end): visit somewhere from begin to end_time The time should expressed as %YmdHM,.g.2023-07-02160.&quot;}&lt;/subtask&gt;</pre></section>
+    </div>
+  </section>
+</body>
+</html>

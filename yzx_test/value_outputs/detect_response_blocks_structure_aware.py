@@ -2,6 +2,7 @@ import argparse
 import html
 import json
 import os
+import re
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
@@ -12,6 +13,7 @@ from openpyxl import Workbook, load_workbook
 @dataclass
 class StepBlock:
     step_idx: int
+    global_step_idx: int
     seq_indices: np.ndarray
     tokens: List[str]
     attention: np.ndarray
@@ -55,6 +57,13 @@ def load_step_blocks(value_xlsx_path: str, value_sheet: str) -> List[StepBlock]:
         raise RuntimeError(f"Sheet '{value_sheet}' not found in xlsx: {value_xlsx_path}")
     ws = wb[value_sheet]
     seq_len = _infer_seq_len(ws)
+    capture_start_step = 1
+    if "meta" in wb.sheetnames:
+        meta_ws = wb["meta"]
+        for key_cell, value_cell in meta_ws.iter_rows(min_col=1, max_col=2, values_only=True):
+            if key_cell == "capture_start_step" and value_cell is not None:
+                capture_start_step = int(value_cell)
+                break
 
     step_blocks: List[StepBlock] = []
     row = 1
@@ -84,6 +93,7 @@ def load_step_blocks(value_xlsx_path: str, value_sheet: str) -> List[StepBlock]:
             step_blocks.append(
                 StepBlock(
                     step_idx=step_idx,
+                    global_step_idx=capture_start_step + step_idx - 1,
                     seq_indices=np.asarray(seq_indices, dtype=np.int64),
                     tokens=tokens,
                     attention=np.vstack(attn_rows),
@@ -109,6 +119,9 @@ def select_steps(
     steps_arg: Optional[str],
     step_start: Optional[int],
     step_end: Optional[int],
+    global_steps_arg: Optional[str],
+    global_step_start: Optional[int],
+    global_step_end: Optional[int],
     last_n: Optional[int],
 ) -> List[StepBlock]:
     selected = list(step_blocks)
@@ -116,14 +129,28 @@ def select_steps(
     if explicit_steps is not None:
         step_set = set(explicit_steps)
         selected = [block for block in selected if block.step_idx in step_set]
+    explicit_global_steps = _parse_steps_arg(global_steps_arg)
+    if explicit_global_steps is not None:
+        global_step_set = set(explicit_global_steps)
+        selected = [block for block in selected if block.global_step_idx in global_step_set]
     if step_start is not None:
         selected = [block for block in selected if block.step_idx >= step_start]
     if step_end is not None:
         selected = [block for block in selected if block.step_idx <= step_end]
+    if global_step_start is not None:
+        selected = [block for block in selected if block.global_step_idx >= global_step_start]
+    if global_step_end is not None:
+        selected = [block for block in selected if block.global_step_idx <= global_step_end]
     if last_n is not None:
         selected = selected[-int(last_n) :]
     if not selected:
-        raise RuntimeError("No steps remain after filtering.")
+        available_relative = ",".join(str(block.step_idx) for block in step_blocks)
+        available_global = ",".join(str(block.global_step_idx) for block in step_blocks)
+        raise RuntimeError(
+            "No steps remain after filtering. "
+            f"Available relative steps: {available_relative}; "
+            f"available global steps: {available_global}."
+        )
     return selected
 
 
@@ -224,11 +251,38 @@ def is_structural_shell_text(text: str) -> bool:
     return False
 
 
+def _delimiter_balance(text: str, left: str, right: str) -> int:
+    return text.count(left) - text.count(right)
+
+
+def is_opening_fragment_text(text: str) -> bool:
+    text = text.strip()
+    if not text:
+        return False
+    if text.endswith((",", ":", "{", "[")):
+        return True
+    if _delimiter_balance(text, "{", "}") > 0:
+        return True
+    if _delimiter_balance(text, "[", "]") > 0:
+        return True
+    if _delimiter_balance(text, "<", ">") > 0:
+        return True
+    if text.count('"') % 2 == 1:
+        return True
+    if text.startswith("<") and not text.endswith(">"):
+        return True
+    if text.startswith(("arguments:", "name:", "context:", "objective:")) and not text.endswith((".", "!", "?", "}", "]", ">")):
+        return True
+    return False
+
+
 def is_closing_structural_shell_text(text: str) -> bool:
     text = text.strip()
     if not text:
         return False
     if text in {"}", "}}", "</subtask>"}:
+        return True
+    if text.startswith(("}", "]", ")", "</")) and len(text) <= 16:
         return True
     if "</subtask>" in text and '"' not in text and ":" not in text:
         return True
@@ -241,8 +295,8 @@ def merge_structural_units(units: Sequence[Sequence[int]], tokens: Sequence[str]
     merged: List[List[int]] = []
     for unit in units:
         text = "".join(_clean_token(tokens[idx]) for idx in unit).strip()
-        is_structural = is_structural_shell_text(text)
-        if is_structural and is_closing_structural_shell_text(text) and merged:
+        is_structural = is_structural_shell_text(text) or is_opening_fragment_text(text)
+        if (is_structural or is_closing_structural_shell_text(text)) and is_closing_structural_shell_text(text) and merged:
             merged[-1].extend(unit)
         else:
             merged.append(list(unit))
@@ -250,7 +304,7 @@ def merge_structural_units(units: Sequence[Sequence[int]], tokens: Sequence[str]
     idx = 0
     while idx < len(merged) - 1:
         text = "".join(_clean_token(tokens[token_idx]) for token_idx in merged[idx]).strip()
-        if is_structural_shell_text(text) and not is_closing_structural_shell_text(text):
+        if (is_structural_shell_text(text) or is_opening_fragment_text(text)) and not is_closing_structural_shell_text(text):
             merged[idx + 1] = merged[idx] + merged[idx + 1]
             del merged[idx]
             continue
@@ -295,23 +349,69 @@ def boundary_attention_score(unit_adj: np.ndarray, boundary: int, window: int) -
     return float(np.mean(unit_adj[np.ix_(left, right)]))
 
 
-def boundary_structure_bonus(prev_text: str, next_text: str) -> float:
+def _lexical_items(text: str) -> List[str]:
+    return re.findall(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]", text.lower())
+
+
+def _jaccard_distance(left_items: Sequence[str], right_items: Sequence[str]) -> float:
+    if not left_items and not right_items:
+        return 0.0
+    left_set = set(left_items)
+    right_set = set(right_items)
+    union = left_set | right_set
+    if not union:
+        return 0.0
+    return 1.0 - len(left_set & right_set) / len(union)
+
+
+def boundary_content_bonus(prev_text: str, next_text: str) -> float:
     prev_text = prev_text.strip()
     next_text = next_text.strip()
-    bonus = 0.0
-    if "</subtask>" in prev_text or "}}" in prev_text or prev_text.endswith("},") or prev_text == "}":
-        bonus += 1.0
-    if "<subtask>" in next_text or next_text.startswith("<sub") or "subtask_name" in next_text:
-        bonus += 1.0
-    return bonus
+    if not prev_text or not next_text:
+        return 0.0
+
+    prev_items = _lexical_items(prev_text)
+    next_items = _lexical_items(next_text)
+    lexical_shift = _jaccard_distance(prev_items, next_items)
+
+    prev_len = max(len(prev_items), 1)
+    next_len = max(len(next_items), 1)
+    length_shift = min(1.0, abs(np.log(prev_len / next_len)) / np.log(4.0))
+
+    punctuation_bonus = 0.0
+    if prev_text.endswith((".", "!", "?", "。", "！", "？", ";", "；", ":")):
+        punctuation_bonus += 0.15
+    if next_text.startswith(("-", "*", "1.", "2.", "3.", "4.", "5.")):
+        punctuation_bonus += 0.1
+
+    return float(0.65 * lexical_shift + 0.2 * length_shift + punctuation_bonus)
+
+
+def boundary_contrast_bonus(unit_adj: np.ndarray, boundary: int, window: int) -> float:
+    left = np.arange(max(0, boundary - window), boundary)
+    right = np.arange(boundary, min(unit_adj.shape[0], boundary + window))
+    if left.size == 0 or right.size == 0:
+        return 0.0
+
+    cross = float(np.mean(unit_adj[np.ix_(left, right)]))
+    intra_parts: List[float] = []
+    if left.size >= 2:
+        intra_parts.append(float(np.mean(unit_adj[np.ix_(left, left)])))
+    if right.size >= 2:
+        intra_parts.append(float(np.mean(unit_adj[np.ix_(right, right)])))
+    if not intra_parts:
+        return 0.0
+    intra = float(np.mean(intra_parts))
+    return max(0.0, intra - cross)
 
 
 def hybrid_boundary_scores(unit_adj: np.ndarray, unit_texts: Sequence[str], window: int, structure_weight: float) -> np.ndarray:
     scores = np.zeros(unit_adj.shape[0] - 1, dtype=np.float64)
     for boundary in range(1, unit_adj.shape[0]):
         attn = boundary_attention_score(unit_adj, boundary, window)
-        structure = boundary_structure_bonus(unit_texts[boundary - 1], unit_texts[boundary])
-        scores[boundary - 1] = -attn + structure_weight * structure
+        content = boundary_content_bonus(unit_texts[boundary - 1], unit_texts[boundary])
+        contrast = boundary_contrast_bonus(unit_adj, boundary, window)
+        scores[boundary - 1] = -attn + structure_weight * (0.6 * content + 0.4 * contrast)
     return scores
 
 
@@ -566,6 +666,7 @@ def save_results(
     spans: Sequence[Tuple[int, int]],
     k_results: Sequence[Tuple[int, float, np.ndarray, List[int]]],
     chosen_k: int,
+    selected_steps: Sequence[StepBlock],
 ) -> None:
     chosen = next(item for item in k_results if item[0] == chosen_k)
     labels = chosen[2]
@@ -597,6 +698,8 @@ def save_results(
     ws_meta.append(["chosen_boundaries", ",".join(str(x) for x in boundaries)])
     ws_meta.append(["num_units", int(len(unit_texts))])
     ws_meta.append(["num_blocks_after_smoothing", int(len(blocks))])
+    ws_meta.append(["selected_relative_steps", ",".join(str(block.step_idx) for block in selected_steps)])
+    ws_meta.append(["selected_global_steps", ",".join(str(block.global_step_idx) for block in selected_steps)])
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     wb.save(output_path)
@@ -615,14 +718,32 @@ def save_results(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Detect response blocks with structure-aware unit clustering.")
+    parser = argparse.ArgumentParser(description="Detect response blocks with content-aware unit clustering.")
     parser.add_argument("--value-xlsx", type=str, default="/data/home/yzx/LLaDA/yzx_test/value_outputs/denoise_value.xlsx")
     parser.add_argument("--value-sheet", type=str, default="denoise_values_mask_mask")
     parser.add_argument("--output-xlsx", type=str, default="/data/home/yzx/LLaDA/yzx_test/value_outputs/blocks_structure.xlsx")
     parser.add_argument("--steps", type=str, default=None)
     parser.add_argument("--step-start", type=int, default=None)
     parser.add_argument("--step-end", type=int, default=None)
-    parser.add_argument("--last-n", type=int, default=8)
+    parser.add_argument(
+        "--global-steps",
+        type=str,
+        default=None,
+        help="Comma-separated 1-based global denoising steps, using capture_start_step from the xlsx meta sheet.",
+    )
+    parser.add_argument(
+        "--global-step-start",
+        type=int,
+        default=None,
+        help="Inclusive 1-based global denoising step start, using capture_start_step from the xlsx meta sheet.",
+    )
+    parser.add_argument(
+        "--global-step-end",
+        type=int,
+        default=None,
+        help="Inclusive 1-based global denoising step end, using capture_start_step from the xlsx meta sheet.",
+    )
+    parser.add_argument("--last-n", type=int, default=None)
     parser.add_argument("--weight-mode", type=str, default="confidence_mean", choices=["uniform", "linear", "confidence_mean"])
     parser.add_argument("--confidence-mode", type=str, default="outer", choices=["none", "outer", "row"])
     parser.add_argument("--sym-mode", type=str, default="avg", choices=["avg", "max"])
@@ -630,14 +751,35 @@ def main() -> None:
     parser.add_argument("--min-k", type=int, default=1)
     parser.add_argument("--max-k", type=int, default=6)
     parser.add_argument("--window", type=int, default=2)
-    parser.add_argument("--structure-weight", type=float, default=5.0)
-    parser.add_argument("--split-penalty", type=float, default=1.0)
+    parser.add_argument(
+        "--structure-weight",
+        "--boundary-feature-weight",
+        dest="structure_weight",
+        type=float,
+        default=1.5,
+        help="Weight for generic boundary features such as lexical shift and attention contrast.",
+    )
+    parser.add_argument(
+        "--split-penalty",
+        type=float,
+        default=0.5,
+        help="Penalty per extra split. Lower this when using softer generic boundary features.",
+    )
     parser.add_argument("--min-block-len", type=int, default=2)
     parser.add_argument("--force-k", type=int, default=None)
     args = parser.parse_args()
 
     step_blocks = load_step_blocks(args.value_xlsx, args.value_sheet)
-    step_blocks = select_steps(step_blocks, args.steps, args.step_start, args.step_end, args.last_n)
+    step_blocks = select_steps(
+        step_blocks,
+        args.steps,
+        args.step_start,
+        args.step_end,
+        args.global_steps,
+        args.global_step_start,
+        args.global_step_end,
+        args.last_n,
+    )
     weights = build_step_weights(step_blocks, args.weight_mode)
     agg_adj = aggregate_attention_graph(step_blocks, weights, args.confidence_mode, args.local_beta, args.sym_mode)
 
@@ -658,11 +800,13 @@ def main() -> None:
         args.min_block_len,
     )
     chosen_k = int(args.force_k) if args.force_k is not None else max(k_results, key=lambda item: item[1])[0]
-    save_results(args.output_xlsx, unit_adj, unit_seq, unit_texts, spans, k_results, chosen_k)
+    save_results(args.output_xlsx, unit_adj, unit_seq, unit_texts, spans, k_results, chosen_k, step_blocks)
     chosen = next(item for item in k_results if item[0] == chosen_k)
-    print(f"Saved structure-aware workbook to: {args.output_xlsx}")
+    print(f"Saved content-aware workbook to: {args.output_xlsx}")
     print(f"Saved HTML report to: {os.path.splitext(args.output_xlsx)[0] + '.html'}")
     print(f"Saved block text to: {os.path.splitext(args.output_xlsx)[0] + '_blocks.txt'}")
+    print("Selected relative steps: " + ",".join(str(block.step_idx) for block in step_blocks))
+    print("Selected global steps: " + ",".join(str(block.global_step_idx) for block in step_blocks))
     print(f"Chosen K: {chosen_k}")
     print(f"Blocks after smoothing: {len(contiguous_blocks(chosen[2]))}")
 
