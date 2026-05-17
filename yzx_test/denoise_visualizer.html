@@ -36,7 +36,30 @@
         h1 {
             color: #333;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 22px;
+        }
+        .mode-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .mode-tab {
+            background: #eef3f8;
+            color: #334155;
+            border: 1px solid #d8e0ea;
+        }
+        .mode-tab.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .panel {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 16px;
+            background: #fbfcfe;
+            margin-bottom: 18px;
         }
         .controls {
             margin-bottom: 20px;
@@ -45,6 +68,36 @@
         .file-selector {
             margin-bottom: 16px;
             text-align: center;
+        }
+        .report-selector {
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .report-viewer {
+            display: none;
+            margin: 0;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            overflow: hidden;
+            background: white;
+        }
+        .report-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            color: #495057;
+            font-size: 14px;
+        }
+        .report-frame {
+            width: 100%;
+            height: 760px;
+            border: 0;
+            display: block;
+            background: white;
         }
         button {
             padding: 10px 20px;
@@ -141,42 +194,65 @@
     <div class="container">
         <h1>LLaDA 去噪过程可视化</h1>
 
-        <div class="file-selector">
-            <label for="fileSelect">选择日志文件:</label>
-            <select id="fileSelect" onchange="handleFileChange()">
-                <option value="">加载中...</option>
-            </select>
+        <div class="mode-tabs">
+            <button id="logModeBtn" class="mode-tab active" onclick="switchMode('log')">日志可视化</button>
+            <button id="reportModeBtn" class="mode-tab" onclick="switchMode('report')">HTML 分析报告</button>
         </div>
-        
-        <div class="controls">
-            <button id="prevBtn" onclick="showPrevStep()" disabled>上一步</button>
-            <button id="nextBtn" onclick="showNextStep()">下一步</button>
-            <button id="autoPlayBtn" onclick="toggleAutoPlay()">自动播放</button>
-            <button id="refreshBtn" onclick="loadData()">刷新数据</button>
-            <select id="speedSelect">
-                <option value="500">快速(0.5秒)</option>
-                <option value="1000" selected>中速(1秒)</option>
-                <option value="2000">慢速(2秒)</option>
-                <option value="3000">很慢(3秒)</option>
-            </select>
-            <span id="currentStep">第 0 步 / 0 步</span>
-        </div>
-        
-        <div class="progress-container">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+
+        <section id="logPanel" class="panel">
+            <div class="file-selector">
+                <label for="fileSelect">选择日志文件:</label>
+                <select id="fileSelect" onchange="handleFileChange()">
+                    <option value="">加载中...</option>
+                </select>
             </div>
-        </div>
-        
-        <div class="blocks-container" id="blocksContainer" style="display:none;">
-            <div class="block-selector">块选择:</div>
-            <div id="blockButtons"></div>
-        </div>
-        
-        <div class="step-display">
-            <div class="step-info" id="stepInfo">请先加载数据...</div>
-            <div class="step-result" id="stepResult"></div>
-        </div>
+
+            <div class="controls">
+                <button id="prevBtn" onclick="showPrevStep()" disabled>上一步</button>
+                <button id="nextBtn" onclick="showNextStep()">下一步</button>
+                <button id="autoPlayBtn" onclick="toggleAutoPlay()">自动播放</button>
+                <button id="refreshBtn" onclick="loadData()">刷新数据</button>
+                <select id="speedSelect">
+                    <option value="500">快速(0.5秒)</option>
+                    <option value="1000" selected>中速(1秒)</option>
+                    <option value="2000">慢速(2秒)</option>
+                    <option value="3000">很慢(3秒)</option>
+                </select>
+                <span id="currentStep">第 0 步 / 0 步</span>
+            </div>
+
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="blocks-container" id="blocksContainer" style="display:none;">
+                <div class="block-selector">块选择:</div>
+                <div id="blockButtons"></div>
+            </div>
+
+            <div class="step-display">
+                <div class="step-info" id="stepInfo">请先加载数据...</div>
+                <div class="step-result" id="stepResult"></div>
+            </div>
+        </section>
+
+        <section id="reportPanel" class="panel" style="display:none;">
+            <div class="report-selector">
+                <label for="htmlReportSelect">选择 HTML 分析报告:</label>
+                <select id="htmlReportSelect" onchange="viewSelectedHtmlReport()">
+                    <option value="">加载中...</option>
+                </select>
+            </div>
+
+            <div class="report-viewer" id="reportViewer">
+                <div class="report-toolbar">
+                    <span id="reportTitle">HTML 分析报告</span>
+                </div>
+                <iframe id="reportFrame" class="report-frame" title="HTML 分析报告"></iframe>
+            </div>
+        </section>
     </div>
 
     <script>
@@ -186,6 +262,22 @@
         let autoPlaySpeed = 1000; // 毫秒
         let blocks = [];
         let currentFile = '';
+        let currentHtmlReport = '';
+        let currentMode = 'log';
+
+        function switchMode(mode) {
+            currentMode = mode;
+            const isLog = mode === 'log';
+
+            document.getElementById('logPanel').style.display = isLog ? 'block' : 'none';
+            document.getElementById('reportPanel').style.display = isLog ? 'none' : 'block';
+            document.getElementById('logModeBtn').classList.toggle('active', isLog);
+            document.getElementById('reportModeBtn').classList.toggle('active', !isLog);
+
+            if (!isLog && currentHtmlReport) {
+                viewSelectedHtmlReport();
+            }
+        }
 
         function renderWithMaskHighlight(text) {
             if (!text) return '';
@@ -237,6 +329,53 @@
             }
             select.value = currentFile;
             return true;
+        }
+
+        async function loadHtmlReportList() {
+            const select = document.getElementById('htmlReportSelect');
+            select.innerHTML = '<option value="">加载中...</option>';
+
+            const response = await fetch('/api/html-reports');
+            if (!response.ok) {
+                throw new Error(`HTML 报告列表加载失败: ${response.status}`);
+            }
+
+            const reports = await response.json();
+            if (!reports.length) {
+                select.innerHTML = '<option value="">没有可用 HTML 报告</option>';
+                currentHtmlReport = '';
+                document.getElementById('reportViewer').style.display = 'none';
+                return;
+            }
+
+            select.innerHTML = '';
+            reports.forEach(report => {
+                const option = document.createElement('option');
+                option.value = report;
+                option.textContent = report;
+                select.appendChild(option);
+            });
+
+            if (!reports.includes(currentHtmlReport)) {
+                const preferred = reports.find(report => report.includes('blocks_structure_global_24_31')) || reports[0];
+                currentHtmlReport = preferred;
+            }
+            select.value = currentHtmlReport;
+            if (currentMode === 'report') {
+                viewSelectedHtmlReport();
+            }
+        }
+
+        function viewSelectedHtmlReport() {
+            const select = document.getElementById('htmlReportSelect');
+            const report = select.value;
+            if (!report) {
+                return;
+            }
+            currentHtmlReport = report;
+            document.getElementById('reportTitle').textContent = `HTML 分析报告: ${report}`;
+            document.getElementById('reportFrame').src = `/html-report?file=${encodeURIComponent(report)}`;
+            document.getElementById('reportViewer').style.display = 'block';
         }
 
         // 加载数据
@@ -436,6 +575,11 @@
         // 页面加载完成后自动加载数据
         window.onload = function() {
             loadData();
+            loadHtmlReportList().catch(error => {
+                console.error('加载 HTML 报告列表失败:', error);
+                const select = document.getElementById('htmlReportSelect');
+                select.innerHTML = '<option value="">HTML 报告列表加载失败</option>';
+            });
             
             // 监听速度选择变化
             document.getElementById('speedSelect').addEventListener('change', function() {

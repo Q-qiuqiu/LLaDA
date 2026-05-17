@@ -17,14 +17,49 @@ import re
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VISUALIZER_HTML = os.path.join(BASE_DIR, 'denoise_visualizer.html')
+HTML_REPORT_DIRS = [
+    BASE_DIR,
+    os.path.join(BASE_DIR, 'value_outputs'),
+]
+TEXT_LOG_DIRS = [
+    BASE_DIR,
+    os.path.join(BASE_DIR, 'value_outputs'),
+]
 
 
 def list_txt_files():
     files = []
-    for name in os.listdir(BASE_DIR):
-        path = os.path.join(BASE_DIR, name)
-        if os.path.isfile(path) and name.lower().endswith('.txt'):
-            files.append(name)
+    seen = set()
+    for directory in TEXT_LOG_DIRS:
+        if not os.path.isdir(directory):
+            continue
+        for name in os.listdir(directory):
+            path = os.path.join(directory, name)
+            if not os.path.isfile(path) or not name.lower().endswith('.txt'):
+                continue
+            rel_path = os.path.relpath(path, BASE_DIR).replace('\\', '/')
+            if rel_path not in seen:
+                files.append(rel_path)
+                seen.add(rel_path)
+    return sorted(files)
+
+
+def list_html_report_files():
+    files = []
+    seen = set()
+    for directory in HTML_REPORT_DIRS:
+        if not os.path.isdir(directory):
+            continue
+        for name in os.listdir(directory):
+            path = os.path.join(directory, name)
+            if not os.path.isfile(path) or not name.lower().endswith('.html'):
+                continue
+            rel_path = os.path.relpath(path, BASE_DIR)
+            if rel_path == os.path.basename(VISUALIZER_HTML):
+                continue
+            if rel_path not in seen:
+                files.append(rel_path)
+                seen.add(rel_path)
     return sorted(files)
 
 
@@ -35,10 +70,29 @@ def resolve_selected_file(query_params):
 
     requested = query_params.get('file', [None])[0]
     if requested:
-        safe_name = os.path.basename(requested)
+        safe_name = os.path.normpath(requested).replace('\\', '/')
+        if safe_name.startswith('../') or safe_name.startswith('/'):
+            return None, f"Invalid file path: {requested}"
         if safe_name not in files:
             return None, f"File not found: {safe_name}"
         return os.path.join(BASE_DIR, safe_name), None
+
+    return os.path.join(BASE_DIR, files[0]), None
+
+
+def resolve_selected_html_report(query_params):
+    files = list_html_report_files()
+    if not files:
+        return None, "当前目录和 value_outputs 下没有可用的 html 文件"
+
+    requested = query_params.get('file', [None])[0]
+    if requested:
+        safe_rel = os.path.normpath(requested).replace('\\', '/')
+        if safe_rel.startswith('../') or safe_rel.startswith('/'):
+            return None, f"Invalid report path: {requested}"
+        if safe_rel not in files:
+            return None, f"HTML report not found: {safe_rel}"
+        return os.path.join(BASE_DIR, safe_rel), None
 
     return os.path.join(BASE_DIR, files[0]), None
 
@@ -80,6 +134,34 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-type', 'application/json; charset=utf-8')
                 self.end_headers()
                 self.wfile.write(json.dumps(files, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_error(500, f"Server error: {str(e)}")
+
+        elif parsed_path.path == '/api/html-reports':
+            try:
+                files = list_html_report_files()
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(files, ensure_ascii=False).encode('utf-8'))
+            except Exception as e:
+                self.send_error(500, f"Server error: {str(e)}")
+
+        elif parsed_path.path == '/html-report':
+            try:
+                file_name, error = resolve_selected_html_report(query_params)
+                if error:
+                    self.send_error(404, error)
+                    return
+                with open(file_name, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(content.encode('utf-8'))
+            except FileNotFoundError:
+                self.send_error(404, "HTML report not found")
             except Exception as e:
                 self.send_error(500, f"Server error: {str(e)}")
         
