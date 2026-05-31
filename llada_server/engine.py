@@ -15,6 +15,7 @@ class GenerationResult:
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
+    elapsed_seconds: float
 
 
 class LLaDAEngine:
@@ -125,9 +126,14 @@ class LLaDAEngine:
                 confidence_eos_eot_inf=self.config.confidence_eos_eot_inf,
                 **generation_args,
             )
-            elapsed = time.time() - start
-            _ = elapsed
+            generate_elapsed = time.time() - start
+            print(
+                "LLaDA generate finished:",
+                f"elapsed={generate_elapsed:.2f}s",
+                flush=True,
+            )
 
+            decode_start = time.time()
             completion_ids = out[:, input_ids.shape[1] :]
             text = self.tokenizer.batch_decode(
                 completion_ids,
@@ -135,12 +141,23 @@ class LLaDAEngine:
             )[0]
             completion_tokens = int((completion_ids != self.config.mask_id).sum().item())
             prompt_tokens = int(attention_mask.sum().item())
+            decode_elapsed = time.time() - decode_start
+            total_elapsed = time.time() - start
+            print(
+                "LLaDA decode finished:",
+                f"decode_elapsed={decode_elapsed:.2f}s",
+                f"total_elapsed={total_elapsed:.2f}s",
+                f"completion_tokens={completion_tokens}",
+                f"output_chars={len(text)}",
+                flush=True,
+            )
             return GenerationResult(
                 text=text,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
-            total_tokens=prompt_tokens + completion_tokens,
-        )
+                total_tokens=prompt_tokens + completion_tokens,
+                elapsed_seconds=total_elapsed,
+            )
         finally:
             del input_ids
             del attention_mask

@@ -54,6 +54,14 @@ async def list_models():
 
 @app.post("/v1/chat/completions")
 async def create_chat_completion(request: ChatCompletionRequest):
+    request_id = f"chatcmpl-{uuid.uuid4().hex}"
+    request_start = time.time()
+    print(
+        "HTTP chat request received:",
+        f"id={request_id}",
+        f"messages={len(request.messages)}",
+        flush=True,
+    )
     if request.stream:
         return JSONResponse(
             status_code=400,
@@ -66,7 +74,9 @@ async def create_chat_completion(request: ChatCompletionRequest):
         )
 
     messages = [message.model_dump() for message in request.messages]
+    print("HTTP chat waiting for generation lock:", f"id={request_id}", flush=True)
     async with generation_lock:
+        print("HTTP chat generation lock acquired:", f"id={request_id}", flush=True)
         result = await asyncio.to_thread(
             engine.generate_chat,
             messages,
@@ -79,8 +89,16 @@ async def create_chat_completion(request: ChatCompletionRequest):
         )
 
     created = int(time.time())
+    elapsed = time.time() - request_start
+    print(
+        "HTTP chat response ready:",
+        f"id={request_id}",
+        f"elapsed={elapsed:.2f}s",
+        f"engine_elapsed={result.elapsed_seconds:.2f}s",
+        flush=True,
+    )
     return {
-        "id": f"chatcmpl-{uuid.uuid4().hex}",
+        "id": request_id,
         "object": "chat.completion",
         "created": created,
         "model": request.model or config.model_name,
@@ -101,6 +119,13 @@ async def create_chat_completion(request: ChatCompletionRequest):
 
 @app.post("/v1/completions")
 async def create_completion(request: CompletionRequest):
+    request_id = f"cmpl-{uuid.uuid4().hex}"
+    request_start = time.time()
+    print(
+        "HTTP completion request received:",
+        f"id={request_id}",
+        flush=True,
+    )
     if request.stream:
         return JSONResponse(
             status_code=400,
@@ -117,7 +142,9 @@ async def create_completion(request: CompletionRequest):
     prompt_tokens = 0
     completion_tokens = 0
 
+    print("HTTP completion waiting for generation lock:", f"id={request_id}", flush=True)
     async with generation_lock:
+        print("HTTP completion generation lock acquired:", f"id={request_id}", flush=True)
         for index, prompt in enumerate(prompts):
             result = await asyncio.to_thread(
                 engine.generate_text,
@@ -140,8 +167,15 @@ async def create_completion(request: CompletionRequest):
                 }
             )
 
+    elapsed = time.time() - request_start
+    print(
+        "HTTP completion response ready:",
+        f"id={request_id}",
+        f"elapsed={elapsed:.2f}s",
+        flush=True,
+    )
     return {
-        "id": f"cmpl-{uuid.uuid4().hex}",
+        "id": request_id,
         "object": "text_completion",
         "created": int(time.time()),
         "model": request.model or config.model_name,
