@@ -205,6 +205,14 @@ def aggregate_attention_graph(
     return agg
 
 
+def aggregate_confidence_vector(step_blocks: Sequence[StepBlock], weights: np.ndarray) -> np.ndarray:
+    seq_len = step_blocks[0].confidence.shape[0]
+    conf = np.zeros(seq_len, dtype=np.float64)
+    for weight, block in zip(weights, step_blocks):
+        conf += float(weight) * np.clip(block.confidence.astype(np.float64), 0.0, 1.0)
+    return conf
+
+
 def _clean_token(token: str) -> str:
     return token.split(" (id=")[0]
 
@@ -236,6 +244,141 @@ def build_line_units(tokens: Sequence[str], keep_mask: np.ndarray) -> List[List[
     if not units:
         raise RuntimeError("No line units remain after filtering.")
     return merge_structural_units(units, tokens)
+
+
+def _normalize_scores(values: np.ndarray) -> np.ndarray:
+    if values.size == 0:
+        return values
+    lo = float(np.min(values))
+    hi = float(np.max(values))
+    if hi - lo < 1e-12:
+        return np.zeros_like(values, dtype=np.float64)
+    return (values - lo) / (hi - lo)
+
+
+def token_boundary_structure_bonus(tokens: Sequence[str], boundary: int, context_tokens: int = 8) -> float:
+    left_start = max(0, boundary - context_tokens)
+    right_end = min(len(tokens), boundary + context_tokens)
+    left_text = "".join(_clean_token(token) for token in tokens[left_start:boundary])
+    right_text = "".join(_clean_token(token) for token in tokens[boundary:right_end])
+    around_text = left_text + right_text
+
+    bonus = 0.0
+    if "</subtask>" in left_text or left_text.rstrip().endswith(("}", "},")):
+        bonus += 1.0
+    if "<subtask>" in right_text or "subtask_name" in right_text:
+        bonus += 1.0
+    if re.search(r'"(?:subtask_name|goal|criticism|milestones|result_format)"\s*:', right_text):
+        bonus += 0.45
+    if any(marker in around_text for marker in ("</subtask><subtask>", "</subtask>\n<subtask>")):
+        bonus += 1.0
+    if left_text.rstrip().endswith((".", "。", ";", "；")):
+        bonus += 0.15
+    return bonus
+
+
+def score_token_boundaries(
+    token_adj: np.ndarray,
+    confidence: np.ndarray,
+    tokens: Sequence[str],
+    keep_mask: np.ndarray,
+    window: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    boundaries: List[int] = []
+    attention_contrast: List[float] = []
+    confidence_shift: List[float] = []
+    confidence_valley: List[float] = []
+    structure_bonus: List[float] = []
+
+    seq_len = token_adj.shape[0]
+    for boundary in range(1, seq_len):
+        left = np.asarray(
+            [idx for idx in range(max(0, boundary - window), boundary) if keep_mask[idx]],
+            dtype=np.int64,
+        )
+        right = np.asarray(
+            [idx for idx in range(boundary, min(seq_len, boundary + window)) if keep_mask[idx]],
+            dtype=np.int64,
+        )
+        if left.size == 0 or right.size == 0:
+            continue
+
+        cross = float(np.mean(token_adj[np.ix_(left, right)]))
+        intra_parts: List[float] = []
+        if left.size >= 2:
+            intra_parts.append(float(np.mean(token_adj[np.ix_(left, left)])))
+        if right.size >= 2:
+            intra_parts.append(float(np.mean(token_adj[np.ix_(right, right)])))
+        intra = float(np.mean(intra_parts)) if intra_parts else 0.0
+
+        left_conf = float(np.mean(confidence[left]))
+        right_conf = float(np.mean(confidence[right]))
+        near = np.concatenate([left[-min(left.size, 2) :], right[: min(right.size, 2)]])
+        near_conf = float(np.mean(confidence[near])) if near.size else 0.0
+
+        boundaries.append(boundary)
+        attention_contrast.append(intra - cross)
+        confidence_shift.append(abs(left_conf - right_conf))
+        confidence_valley.append(1.0 - near_conf)
+        structure_bonus.append(token_boundary_structure_bonus(tokens, boundary))
+
+    if not boundaries:
+        return np.empty(0, dtype=np.int64), np.empty(0, dtype=np.float64)
+
+    attention_part = _normalize_scores(np.asarray(attention_contrast, dtype=np.float64))
+    shift_part = _normalize_scores(np.asarray(confidence_shift, dtype=np.float64))
+    valley_part = _normalize_scores(np.asarray(confidence_valley, dtype=np.float64))
+    structure_part = _normalize_scores(np.asarray(structure_bonus, dtype=np.float64))
+    scores = 0.45 * attention_part + 0.25 * shift_part + 0.15 * valley_part + 0.15 * structure_part
+    return np.asarray(boundaries, dtype=np.int64), scores
+
+
+def choose_token_boundaries(
+    boundaries: np.ndarray,
+    scores: np.ndarray,
+    keep_mask: np.ndarray,
+    top_k: int,
+    min_unit_tokens: int,
+) -> List[int]:
+    if boundaries.size == 0 or top_k <= 0:
+        return []
+
+    def kept_count(start: int, end: int) -> int:
+        return int(np.sum(keep_mask[start:end]))
+
+    ranked = sorted(range(scores.shape[0]), key=lambda idx: float(scores[idx]), reverse=True)
+    selected: List[int] = []
+    seq_len = keep_mask.shape[0]
+    for score_idx in ranked:
+        boundary = int(boundaries[score_idx])
+        points = [0] + sorted(selected + [boundary]) + [seq_len]
+        if any(kept_count(start, end) < min_unit_tokens for start, end in zip(points[:-1], points[1:])):
+            continue
+        selected.append(boundary)
+        if len(selected) >= top_k:
+            break
+    return sorted(selected)
+
+
+def build_token_boundary_units(
+    token_adj: np.ndarray,
+    confidence: np.ndarray,
+    tokens: Sequence[str],
+    keep_mask: np.ndarray,
+    window: int,
+    top_k: int,
+    min_unit_tokens: int,
+) -> Tuple[List[List[int]], List[Tuple[int, float]]]:
+    boundaries, scores = score_token_boundaries(token_adj, confidence, tokens, keep_mask, window)
+    selected = choose_token_boundaries(boundaries, scores, keep_mask, top_k, min_unit_tokens)
+    points = [0] + selected + [len(tokens)]
+    units: List[List[int]] = []
+    for start, end in zip(points[:-1], points[1:]):
+        unit = [idx for idx in range(start, end) if keep_mask[idx]]
+        if unit:
+            units.append(unit)
+    score_map = {int(boundary): float(score) for boundary, score in zip(boundaries, scores)}
+    return units, [(boundary, score_map.get(boundary, 0.0)) for boundary in selected]
 
 
 def is_structural_shell_text(text: str) -> bool:
@@ -667,6 +810,9 @@ def save_results(
     k_results: Sequence[Tuple[int, float, np.ndarray, List[int]]],
     chosen_k: int,
     selected_steps: Sequence[StepBlock],
+    unit_source_step: StepBlock,
+    unit_build_method: str,
+    token_boundary_debug: Sequence[Tuple[int, float]],
 ) -> None:
     chosen = next(item for item in k_results if item[0] == chosen_k)
     labels = chosen[2]
@@ -700,6 +846,15 @@ def save_results(
     ws_meta.append(["num_blocks_after_smoothing", int(len(blocks))])
     ws_meta.append(["selected_relative_steps", ",".join(str(block.step_idx) for block in selected_steps)])
     ws_meta.append(["selected_global_steps", ",".join(str(block.global_step_idx) for block in selected_steps)])
+    ws_meta.append(["unit_source_relative_step", int(unit_source_step.step_idx)])
+    ws_meta.append(["unit_source_global_step", int(unit_source_step.global_step_idx)])
+    ws_meta.append(["unit_build_method", unit_build_method])
+    ws_meta.append(
+        [
+            "token_boundary_candidates",
+            ",".join(f"{boundary}:{score:.6g}" for boundary, score in token_boundary_debug),
+        ]
+    )
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     wb.save(output_path)
@@ -752,6 +907,31 @@ def main() -> None:
     parser.add_argument("--max-k", type=int, default=6)
     parser.add_argument("--window", type=int, default=2)
     parser.add_argument(
+        "--unit-mode",
+        type=str,
+        default="auto",
+        choices=["auto", "line", "token"],
+        help="line uses newline-based units; token uses token-level attention/confidence boundary scoring; auto falls back to token mode if line mode yields one unit.",
+    )
+    parser.add_argument(
+        "--token-boundary-window",
+        type=int,
+        default=8,
+        help="Token window size on each side when scoring token-level boundary candidates.",
+    )
+    parser.add_argument(
+        "--token-boundary-top-k",
+        type=int,
+        default=12,
+        help="Maximum number of token-level boundaries used to compose units.",
+    )
+    parser.add_argument(
+        "--token-min-unit-tokens",
+        type=int,
+        default=8,
+        help="Minimum kept tokens in each token-boundary unit.",
+    )
+    parser.add_argument(
         "--structure-weight",
         "--boundary-feature-weight",
         dest="structure_weight",
@@ -782,11 +962,34 @@ def main() -> None:
     )
     weights = build_step_weights(step_blocks, args.weight_mode)
     agg_adj = aggregate_attention_graph(step_blocks, weights, args.confidence_mode, args.local_beta, args.sym_mode)
+    agg_confidence = aggregate_confidence_vector(step_blocks, weights)
 
-    tokens = step_blocks[0].tokens
-    seq_indices = step_blocks[0].seq_indices
+    unit_source_block = step_blocks[-1]
+    tokens = unit_source_block.tokens
+    seq_indices = unit_source_block.seq_indices
     keep_mask = np.asarray([_keep_token(token) for token in tokens], dtype=bool)
-    units = build_line_units(tokens, keep_mask)
+    token_boundary_debug: List[Tuple[int, float]] = []
+    unit_build_method = "line"
+    if args.unit_mode in {"auto", "line"}:
+        units = build_line_units(tokens, keep_mask)
+    else:
+        units = []
+
+    if args.unit_mode == "token" or (args.unit_mode == "auto" and len(units) <= 1):
+        token_units, token_boundary_debug = build_token_boundary_units(
+            token_adj=agg_adj,
+            confidence=agg_confidence,
+            tokens=tokens,
+            keep_mask=keep_mask,
+            window=args.token_boundary_window,
+            top_k=args.token_boundary_top_k,
+            min_unit_tokens=args.token_min_unit_tokens,
+        )
+        if token_units:
+            units = token_units
+            unit_build_method = "token_boundary"
+    elif args.unit_mode == "auto":
+        unit_build_method = "line"
     unit_adj, unit_seq, unit_texts, spans = aggregate_units(agg_adj, seq_indices, tokens, units)
 
     k_results = evaluate_k(
@@ -800,13 +1003,32 @@ def main() -> None:
         args.min_block_len,
     )
     chosen_k = int(args.force_k) if args.force_k is not None else max(k_results, key=lambda item: item[1])[0]
-    save_results(args.output_xlsx, unit_adj, unit_seq, unit_texts, spans, k_results, chosen_k, step_blocks)
+    save_results(
+        args.output_xlsx,
+        unit_adj,
+        unit_seq,
+        unit_texts,
+        spans,
+        k_results,
+        chosen_k,
+        step_blocks,
+        unit_source_block,
+        unit_build_method,
+        token_boundary_debug,
+    )
     chosen = next(item for item in k_results if item[0] == chosen_k)
     print(f"Saved content-aware workbook to: {args.output_xlsx}")
     print(f"Saved HTML report to: {os.path.splitext(args.output_xlsx)[0] + '.html'}")
     print(f"Saved block text to: {os.path.splitext(args.output_xlsx)[0] + '_blocks.txt'}")
     print("Selected relative steps: " + ",".join(str(block.step_idx) for block in step_blocks))
     print("Selected global steps: " + ",".join(str(block.global_step_idx) for block in step_blocks))
+    print(f"Unit source step: relative={unit_source_block.step_idx}, global={unit_source_block.global_step_idx}")
+    print(f"Unit build method: {unit_build_method}")
+    if token_boundary_debug:
+        print(
+            "Token boundaries: "
+            + ",".join(f"{boundary}:{score:.4g}" for boundary, score in token_boundary_debug)
+        )
     print(f"Chosen K: {chosen_k}")
     print(f"Blocks after smoothing: {len(contiguous_blocks(chosen[2]))}")
 
