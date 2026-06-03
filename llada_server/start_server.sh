@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # GPU selection. Example: "0" or "0,1".
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-7}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 # Model and server configuration.
@@ -15,8 +15,8 @@ export LLADA_DTYPE="${LLADA_DTYPE:-bfloat16}"
 
 # Default generation parameters.
 export LLADA_STEPS="${LLADA_STEPS:-128}"
-export LLADA_GEN_LENGTH="${LLADA_GEN_LENGTH:-256}"
-export LLADA_BLOCK_LENGTH="${LLADA_BLOCK_LENGTH:-256}"
+export LLADA_GEN_LENGTH="${LLADA_GEN_LENGTH:-512}"
+export LLADA_BLOCK_LENGTH="${LLADA_BLOCK_LENGTH:-512}"
 export LLADA_TEMPERATURE="${LLADA_TEMPERATURE:-0}"
 export LLADA_CFG_SCALE="${LLADA_CFG_SCALE:-0}"
 export LLADA_REMASKING="${LLADA_REMASKING:-low_confidence}"
