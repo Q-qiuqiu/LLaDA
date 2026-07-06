@@ -58,6 +58,15 @@ def _keep_token(token: str, is_masked: bool) -> bool:
     return True
 
 
+def _keep_text_token(token: str) -> bool:
+    text = _clean_token(token)
+    if text.strip() == "":
+        return False
+    if "<|endoftext|>" in text or "<|eot_id|>" in text:
+        return False
+    return True
+
+
 def _structure_bonus(tokens: Sequence[str], boundary: int, context_tokens: int = 10) -> float:
     left_start = max(0, boundary - context_tokens)
     right_end = min(len(tokens), boundary + context_tokens)
@@ -230,6 +239,229 @@ def find_structural_spans(
 
 def spans_to_boundaries(spans: Sequence[Tuple[int, int]], seq_len: int) -> List[int]:
     return [int(end) for _, end in spans[:-1] if 0 < int(end) < int(seq_len)]
+
+
+def build_line_units(token_texts: Sequence[str]) -> List[List[int]]:
+    units: List[List[int]] = []
+    cur: List[int] = []
+    for idx, token in enumerate(token_texts):
+        text = _clean_token(token)
+        if "\n" in text or text == "\\n":
+            if cur:
+                units.append(cur)
+                cur = []
+            stripped = text.replace("\\n", "").replace("\n", "").strip()
+            if stripped and _keep_text_token(stripped):
+                cur.append(idx)
+            continue
+        if not _keep_text_token(text):
+            continue
+        cur.append(idx)
+    if cur:
+        units.append(cur)
+    if not units:
+        units = [[idx] for idx, token in enumerate(token_texts) if _keep_text_token(token)]
+    return merge_line_units(units, token_texts)
+
+
+def _unit_text(unit: Sequence[int], token_texts: Sequence[str]) -> str:
+    return "".join(_clean_token(token_texts[idx]) for idx in unit).strip()
+
+
+def _is_opening_shell(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text.lower())
+    if not compact:
+        return False
+    if compact in {"<subtask>", "<tool_call>", "<agent_call>", "{", "[", "<subtask>{", "<tool_call>{"}:
+        return True
+    if compact.startswith(("<sub", "<tool", "<agent")) and '"' not in compact and ":" not in compact:
+        return True
+    if compact.endswith(("{", "[", ":")) and len(compact) <= 24:
+        return True
+    return False
+
+
+def _is_closing_shell(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text.lower())
+    if not compact:
+        return False
+    if compact in {"}", "]", "</subtask>", "</tool_call>", "</agent_call>", "}</subtask>", "}</tool_call>"}:
+        return True
+    if compact.startswith(("}", "]", "</")) and len(compact) <= 32:
+        return True
+    return False
+
+
+def merge_line_units(
+    units: Sequence[Sequence[int]],
+    token_texts: Sequence[str],
+    min_tokens: int = 4,
+) -> List[List[int]]:
+    merged: List[List[int]] = []
+    pending_prefix: List[int] = []
+    for raw_unit in units:
+        unit = list(raw_unit)
+        text = _unit_text(unit, token_texts)
+        if _is_opening_shell(text):
+            pending_prefix.extend(unit)
+            continue
+        if pending_prefix:
+            unit = pending_prefix + unit
+            pending_prefix = []
+        if _is_closing_shell(text) and merged:
+            merged[-1].extend(unit)
+        else:
+            merged.append(unit)
+    if pending_prefix:
+        if merged:
+            merged[-1].extend(pending_prefix)
+        else:
+            merged.append(pending_prefix)
+
+    idx = 0
+    while idx < len(merged):
+        if len(merged[idx]) >= min_tokens or len(merged) == 1:
+            idx += 1
+            continue
+        if idx == 0:
+            merged[idx + 1] = merged[idx] + merged[idx + 1]
+            del merged[idx]
+            continue
+        merged[idx - 1].extend(merged[idx])
+        del merged[idx]
+    return merged
+
+
+def aggregate_units(
+    graph: np.ndarray,
+    confidence: np.ndarray,
+    token_texts: Sequence[str],
+    units: Sequence[Sequence[int]],
+) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    n = len(units)
+    unit_graph = np.zeros((n, n), dtype=np.float64)
+    unit_conf = np.zeros(n, dtype=np.float64)
+    unit_texts: List[str] = []
+    for i, group_i in enumerate(units):
+        idx_i = np.asarray(group_i, dtype=np.int64)
+        unit_conf[i] = float(np.mean(confidence[idx_i])) if idx_i.size else 0.0
+        unit_texts.append("".join(_clean_token(token_texts[idx]) for idx in group_i).strip())
+        for j, group_j in enumerate(units):
+            idx_j = np.asarray(group_j, dtype=np.int64)
+            block = graph[np.ix_(idx_i, idx_j)]
+            unit_graph[i, j] = float(np.mean(block)) if block.size else 0.0
+    return unit_graph, unit_conf, unit_texts
+
+
+def _unit_boundary_scores(
+    unit_graph: np.ndarray,
+    unit_conf: np.ndarray,
+    unit_texts: Sequence[str],
+    units: Sequence[Sequence[int]],
+    token_texts: Sequence[str],
+    window: int,
+    structure_weight: float,
+) -> np.ndarray:
+    scores = np.zeros(max(0, unit_graph.shape[0] - 1), dtype=np.float64)
+    if scores.size == 0:
+        return scores
+    for boundary in range(1, unit_graph.shape[0]):
+        left = np.arange(max(0, boundary - window), boundary)
+        right = np.arange(boundary, min(unit_graph.shape[0], boundary + window))
+        if left.size == 0 or right.size == 0:
+            continue
+        cross = float(np.mean(unit_graph[np.ix_(left, right)]))
+        intra_parts: List[float] = []
+        if left.size >= 2:
+            intra_parts.append(float(np.mean(unit_graph[np.ix_(left, left)])))
+        if right.size >= 2:
+            intra_parts.append(float(np.mean(unit_graph[np.ix_(right, right)])))
+        intra = float(np.mean(intra_parts)) if intra_parts else 0.0
+        conf_shift = abs(float(np.mean(unit_conf[left])) - float(np.mean(unit_conf[right])))
+        token_boundary = int(units[boundary][0])
+        struct = _structure_bonus(token_texts, token_boundary)
+        penalty = _json_fragment_penalty(token_texts, token_boundary)
+        scores[boundary - 1] = (
+            0.60 * max(0.0, intra - cross)
+            + 0.20 * conf_shift
+            + 0.20 * float(structure_weight) * struct
+            - 0.20 * penalty
+        )
+    return scores
+
+
+def choose_unit_boundaries(
+    scores: np.ndarray,
+    max_blocks: int,
+    force_blocks: int,
+    min_block_units: int,
+    min_score: float,
+) -> List[int]:
+    if scores.size == 0:
+        return []
+    max_splits = max(0, int(max_blocks) - 1)
+    if force_blocks and force_blocks > 0:
+        max_splits = max(0, int(force_blocks) - 1)
+        threshold = -float("inf")
+    else:
+        threshold = max(float(min_score), float(np.mean(scores) + 0.25 * np.std(scores)))
+    ranked = sorted(range(scores.shape[0]), key=lambda idx: float(scores[idx]), reverse=True)
+    selected: List[int] = []
+    num_units = scores.shape[0] + 1
+
+    def valid_with(boundary: int) -> bool:
+        points = [0] + sorted(selected + [boundary]) + [num_units]
+        return all((end - start) >= min_block_units for start, end in zip(points[:-1], points[1:]))
+
+    for idx in ranked:
+        boundary = idx + 1
+        if float(scores[idx]) < threshold:
+            continue
+        if not valid_with(boundary):
+            continue
+        selected.append(boundary)
+        if len(selected) >= max_splits:
+            break
+    return sorted(selected)
+
+
+def detect_line_unit_boundaries(
+    graph: np.ndarray,
+    confidence: np.ndarray,
+    token_texts: Sequence[str],
+    unit_window: int,
+    structure_weight: float,
+    max_blocks: int,
+    force_blocks: int,
+    min_block_units: int,
+    min_score: float,
+) -> Tuple[List[int], List[Tuple[int, float]]]:
+    units = build_line_units(token_texts)
+    if len(units) <= 1:
+        return [], []
+    unit_graph, unit_conf, unit_texts = aggregate_units(graph, confidence, token_texts, units)
+    scores = _unit_boundary_scores(
+        unit_graph=unit_graph,
+        unit_conf=unit_conf,
+        unit_texts=unit_texts,
+        units=units,
+        token_texts=token_texts,
+        window=unit_window,
+        structure_weight=structure_weight,
+    )
+    unit_boundaries = choose_unit_boundaries(
+        scores=scores,
+        max_blocks=max_blocks,
+        force_blocks=force_blocks,
+        min_block_units=min_block_units,
+        min_score=min_score,
+    )
+    token_boundaries = [int(units[boundary][0]) for boundary in unit_boundaries]
+    debug = [
+        (int(units[boundary][0]), float(scores[boundary - 1]))
+        for boundary in unit_boundaries
+    ]
+    return token_boundaries, debug
 
 
 def aggregate_attention_graph(
@@ -406,6 +638,12 @@ class OnlineBlockDetector:
         stable_rounds: int = 2,
         boundary_tolerance: int = 2,
         min_mean_confidence: float = 0.05,
+        detection_mode: str = "line_unit",
+        line_unit_window: int = 2,
+        line_unit_max_blocks: int = 4,
+        line_unit_force_blocks: int = 0,
+        line_unit_min_block_units: int = 2,
+        line_unit_min_score: float = 0.0,
         prefer_structural_spans: bool = False,
         allow_partial_structures: bool = True,
     ) -> None:
@@ -419,6 +657,12 @@ class OnlineBlockDetector:
         self.stable_rounds = int(stable_rounds)
         self.boundary_tolerance = int(boundary_tolerance)
         self.min_mean_confidence = float(min_mean_confidence)
+        self.detection_mode = str(detection_mode)
+        self.line_unit_window = int(line_unit_window)
+        self.line_unit_max_blocks = int(line_unit_max_blocks)
+        self.line_unit_force_blocks = int(line_unit_force_blocks)
+        self.line_unit_min_block_units = int(line_unit_min_block_units)
+        self.line_unit_min_score = float(line_unit_min_score)
         self.prefer_structural_spans = bool(prefer_structural_spans)
         self.allow_partial_structures = bool(allow_partial_structures)
         self.snapshots: List[StepSnapshot] = []
@@ -455,17 +699,33 @@ class OnlineBlockDetector:
             window=self.boundary_window,
             structure_weight=self.structure_weight,
         )
+        line_debug: List[Tuple[int, float]] = []
+        if self.detection_mode == "line_unit":
+            selected, line_debug = detect_line_unit_boundaries(
+                graph=graph,
+                confidence=confidence,
+                token_texts=source.token_texts,
+                unit_window=self.line_unit_window,
+                structure_weight=self.structure_weight,
+                max_blocks=self.line_unit_max_blocks,
+                force_blocks=self.line_unit_force_blocks,
+                min_block_units=self.line_unit_min_block_units,
+                min_score=self.line_unit_min_score,
+            )
+        else:
+            selected = []
+
         structural_spans = (
             find_structural_spans(
                 source.token_texts,
                 allow_partial_structures=self.allow_partial_structures,
             )
-            if self.prefer_structural_spans
+            if self.prefer_structural_spans and not selected
             else []
         )
         if structural_spans:
             selected = spans_to_boundaries(structural_spans, len(source.token_texts))
-        else:
+        elif not selected:
             selected = choose_boundaries(
                 boundaries=boundaries,
                 scores=scores,
@@ -484,6 +744,7 @@ class OnlineBlockDetector:
         self._last_boundaries = list(selected)
 
         score_map = {int(b): float(s) for b, s in zip(boundaries, scores)}
+        score_map.update({int(b): float(s) for b, s in line_debug})
         spans = self._build_spans(selected, confidence, source.token_texts)
         frozen = bool(freeze_when_stable and self._stable_count >= self.stable_rounds and len(spans) > 1)
         result = DetectionResult(

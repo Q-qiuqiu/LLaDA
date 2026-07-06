@@ -50,11 +50,25 @@ CONFIG = {
     # 0.0 表示关闭 CFG。
     "cfg_scale": 0.0,
     # 从第几个全局 denoising step 开始做在线分块检测。
-    "detect_start_step": 32,
+    "detect_start_step":56,
     # 每隔多少个 denoising step 做一次在线分块检测。
     "detect_interval": 2,
     # detector 聚合最近多少次检测 snapshot 的 attention/confidence 信号。
-    "detector_history_size": 4,
+    "detector_history_size": 8,
+    # 检测模式："line_unit" 表示按换行先切 unit，再聚合 unit 图分 block；"token" 表示直接 token 边界。
+    "detection_mode": "line_unit",
+    # line_unit 模式只用从 detect_start_step 开始的连续多少步进行识别。
+    "line_unit_steps": 8,
+    # line_unit 边界评分时，边界左右各看多少个 unit。
+    "line_unit_window": 2,
+    # line_unit 模式最多输出多少个 block。
+    "line_unit_max_blocks": 4,
+    # line_unit 模式强制输出多少个 block；0 表示自动选择。
+    "line_unit_force_blocks": 0,
+    # line_unit 模式每个 block 至少包含多少个 unit。
+    "line_unit_min_block_units": 2,
+    # line_unit 模式的最小边界分数。
+    "line_unit_min_score": 0.0,
     # 每次检测最多选择多少个边界；最终 block 数最多约为 detector_top_k + 1。
     "detector_top_k": 4,
     # 每个候选 block 至少保留多少个有效 token，避免切出过碎的小块。
@@ -400,13 +414,15 @@ class LLaDAOnlineBlockwiseGenerator:
         frozen_detection: Optional[DetectionResult] = None
         frozen_logged = False
         last_blockwise_decode: Optional[Dict[str, object]] = None
+        detection_window_complete = False
 
         if save_intermediate:
             os.makedirs(os.path.dirname(output_file) or ".", exist_ok=True)
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(
                     f"steps={steps}, gen_length={gen_length}, block_length={block_length}, "
-                    f"detect_start_step={detect_start_step}, detect_interval={detect_interval}\n"
+                    f"detect_start_step={detect_start_step}, detect_interval={detect_interval}, "
+                    f"detection_mode={detector.detection_mode}, history_size={detector.history_size}\n"
                 )
                 f.write("=" * 80 + "\n")
                 f.write("This log records detection rounds, agent-name parse attempts, and only the final blockwise decode sequence.\n")
@@ -489,11 +505,21 @@ class LLaDAOnlineBlockwiseGenerator:
 
                 should_detect = (
                     current_step_1based >= int(detect_start_step)
-                    and (current_step_1based - int(detect_start_step)) % max(1, int(detect_interval)) == 0
+                    and (current_step_1based - int(detect_start_step)) >= max(0, detector.history_size - 1)
+                    and (
+                        detector.detection_mode == "line_unit"
+                        or (current_step_1based - int(detect_start_step)) % max(1, int(detect_interval)) == 0
+                    )
                     and frozen_detection is None
+                    and not detection_window_complete
                 )
                 if should_detect:
                     detection = detector.detect(freeze_when_stable=True)
+                    if detector.detection_mode == "line_unit":
+                        detection_window_complete = True
+                        detection.frozen = len(detection.spans) > 1
+                        if detection.frozen:
+                            detector._frozen_result = detection
                     response_before_update = self.decode_with_mask(
                         x[0, prompt_len:].detach().tolist()
                     )
@@ -643,6 +669,13 @@ def main() -> None:
     parser.add_argument("--detect-start-step", type=int, default=CONFIG["detect_start_step"])
     parser.add_argument("--detect-interval", type=int, default=CONFIG["detect_interval"])
     parser.add_argument("--detector-history-size", type=int, default=CONFIG["detector_history_size"])
+    parser.add_argument("--detection-mode", type=str, default=CONFIG["detection_mode"], choices=["line_unit", "token"])
+    parser.add_argument("--line-unit-steps", type=int, default=CONFIG["line_unit_steps"])
+    parser.add_argument("--line-unit-window", type=int, default=CONFIG["line_unit_window"])
+    parser.add_argument("--line-unit-max-blocks", type=int, default=CONFIG["line_unit_max_blocks"])
+    parser.add_argument("--line-unit-force-blocks", type=int, default=CONFIG["line_unit_force_blocks"])
+    parser.add_argument("--line-unit-min-block-units", type=int, default=CONFIG["line_unit_min_block_units"])
+    parser.add_argument("--line-unit-min-score", type=float, default=CONFIG["line_unit_min_score"])
     parser.add_argument("--detector-top-k", type=int, default=CONFIG["detector_top_k"])
     parser.add_argument("--min-span-tokens", type=int, default=CONFIG["min_span_tokens"])
     parser.add_argument("--boundary-window", type=int, default=CONFIG["boundary_window"])
@@ -680,7 +713,13 @@ def main() -> None:
         inputs = generator.tokenizer(input_text, return_tensors="pt").to(args.device)
 
     detector = OnlineBlockDetector(
-        history_size=args.detector_history_size,
+        history_size=args.line_unit_steps if args.detection_mode == "line_unit" else args.detector_history_size,
+        detection_mode=args.detection_mode,
+        line_unit_window=args.line_unit_window,
+        line_unit_max_blocks=args.line_unit_max_blocks,
+        line_unit_force_blocks=args.line_unit_force_blocks,
+        line_unit_min_block_units=args.line_unit_min_block_units,
+        line_unit_min_score=args.line_unit_min_score,
         detect_top_k=args.detector_top_k,
         min_span_tokens=args.min_span_tokens,
         boundary_window=args.boundary_window,
