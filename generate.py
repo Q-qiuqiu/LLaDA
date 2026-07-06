@@ -41,7 +41,7 @@ def get_num_transfer_tokens(mask_index, steps):
 
 
 @ torch.no_grad()
-def generate(model, prompt, attention_mask=None, steps=128, gen_length=128, block_length=128, temperature=0.,
+def generate(model, prompt, attention_mask=None, steps=128, gen_length=512, block_length=512, temperature=0.,
              cfg_scale=0., remasking='low_confidence', mask_id=126336, logits_eos_inf=False, confidence_eos_eot_inf=False,
              save_intermediate=False, tokenizer=None, output_file="generation_process.txt"):
     '''
@@ -162,7 +162,7 @@ def generate(model, prompt, attention_mask=None, steps=128, gen_length=128, bloc
 def main():
     device = 'cuda'
 
-    model_path = '/home/yzx/models_weight/LLaDA/'
+    model_path = '/data/labshare/Param/llada/'
     #model = AutoModel.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True, torch_dtype=torch.bfloat16).to(device).eval()
     #tokenizer = AutoTokenizer.from_pretrained('GSAI-ML/LLaDA-8B-Instruct', trust_remote_code=True)
     
@@ -179,215 +179,26 @@ def main():
     #"Joy can read 8 pages of a book in 20 minutes. How many hours will it take her to read 120 pages?",
     #"Randy has 60 mango trees on his farm. He also has 5 less than half as many coconut trees as mango trees. How many trees does Randy have in all on his farm?"
     prompts = '''
-    You are an intelligent assistant designed to help users accomplish tasks using a set of tools.
-    
-    Important rules: 
-    1.When a tool is applicable:
-    - Respond with a JSON object in the last
-    - The JSON must contain "name" and "arguments"
-    2.Provide accurate and complete responses to the user.You can combine multiple tool calls if necessary,but respond to the user only once.
-    3.For each tool call,specify: -server_name: the MCP server hosting the target tool - tool_name: the name of the target tool - params: a dictionary of input parameters for the tool
-    
-    Query:I'm planning a trip to the Forbidden City in Beijing, show me where to park and what's interesting to do within 1km distance?
-    Available MCP tools(choose from these) :
-
-    - suggest_meeting_point (server: osm-mcp-server): 
-    Find the optimal meeting place for multiple people coming from different locations.
-    
-    This tool calculates a central meeting point based on the locations of multiple individuals,
-    then recommends suitable venues near that central point. Ideal for planning social gatherings,
-    business meetings, or any situation where multiple people need to converge from different
-    starting points.
-
-    Args:
-        locations: List of dictionaries, each containing the latitude and longitude of a person's location
-                Example: [{"latitude": 37.7749, "longitude": -122.4194}, {"latitude": 37.3352, "longitude": -121.8811}]
-        venue_type: Type of venue to suggest as a meeting point. Options include:
-                "cafe", "restaurant", "bar", "library", "park", etc.
-        
-    Returns:
-        Meeting point recommendations including:
-        - Calculated center point coordinates
-        - List of suggested venues with names and details
-        - Total number of matching venues in the area
-    . Input: {"locations": {"items": {"additionalProperties": {"type": "number"}, "type": "object"}, "title": "Locations", "type": "array"}, "venue_type": {"default": "cafe", "title": "Venue Type", "type": "string"}}
-    - explore_area (server: osm-mcp-server): 
-    Generate a comprehensive profile of an area including all amenities and features.
-
-    This powerful analysis tool creates a detailed overview of a neighborhood or area by
-    identifying and categorizing all geographic features, amenities, and points of interest.
-    Results are organized by category for easy analysis. Excellent for neighborhood research,
-    area comparisons, and location-based decision making.
-
-    Args:
-        latitude: Center point latitude (decimal degrees)
-        longitude: Center point longitude (decimal degrees)
-        radius: Search radius in meters (defaults to 500m)
-        
-    Returns:
-        In-depth area profile including:
-        - Address and location context
-        - Total feature count
-        - Features organized by category and subcategory
-        - Each feature includes name, coordinates, and detailed metadata
-    . Input: {"latitude": {"title": "Latitude", "type": "number"}, "longitude": {"title": "Longitude", "type": "number"}, "radius": {"default": 500, "title": "Radius", "type": "number"}}
-    - find_ev_charging_stations (server: osm-mcp-server): 
-    Locate electric vehicle charging stations near a specific location.
-
-    This specialized search tool identifies EV charging infrastructure within a specified
-    distance from a location. Results can be filtered by connector type (Tesla, CCS, CHAdeMO, etc.)
-    and minimum power delivery. Essential for EV owners planning trips or evaluating potential
-    charging stops.
-
-    Args:
-        latitude: Center point latitude (decimal degrees)
-        longitude: Center point longitude (decimal degrees)
-        radius: Search radius in meters (defaults to 5000m/5km)
-        connector_types: Optional list of specific connector types to filter by
-                        (e.g., ["type2", "ccs", "tesla"])
-        min_power: Minimum charging power in kW
-        
-    Returns:
-        List of charging stations with:
-        - Location name and operator
-        - Available connector types
-        - Charging speeds
-        - Number of charging points
-        - Access restrictions
-        - Other relevant metadata
-    . Input: {"latitude": {"title": "Latitude", "type": "number"}, "longitude": {"title": "Longitude", "type": "number"}, "radius": {"default": 5000, "title": "Radius", "type": "number"}, "connector_types": {"default": null, "items": {"type": "string"}, "title": "Connector Types", "type": "array"}, "min_power": {"default": null, "title": "Min Power", "type": "number"}}
-    - search_category (server: osm-mcp-server): 
-    Search for specific types of places within a defined geographic area.
-
-    This tool allows targeted searches for places matching specific categories within
-    a rectangular geographic region. It's particularly useful for filtering places by type
-    (restaurants, schools, parks, etc.) within a neighborhood or city district. Results include
-    complete location details and metadata about each matching place.
-
-    Args:
-        category: Main OSM category to search for (e.g., "amenity", "shop", "tourism", "building")
-        min_latitude: Southern boundary of search area (decimal degrees)
-        min_longitude: Western boundary of search area (decimal degrees)
-        max_latitude: Northern boundary of search area (decimal degrees)
-        max_longitude: Eastern boundary of search area (decimal degrees)
-        subcategories: Optional list of specific subcategories to filter by (e.g., ["restaurant", "cafe"])
-        
-    Returns:
-        Structured results including:
-        - Query parameters
-        - Count of matching places
-        - List of matching places with coordinates, names, and metadata
-    . Input: {"category": {"title": "Category", "type": "string"}, "min_latitude": {"title": "Min Latitude", "type": "number"}, "min_longitude": {"title": "Min Longitude", "type": "number"}, "max_latitude": {"title": "Max Latitude", "type": "number"}, "max_longitude": {"title": "Max Longitude", "type": "number"}, "subcategories": {"default": null, "items": {"type": "string"}, "title": "Subcategories", "type": "array"}}
-    - find_schools_nearby (server: osm-mcp-server): 
-    Locate educational institutions near a specific location, filtered by education level.
-
-    This specialized search tool identifies schools, colleges, and other educational institutions
-    within a specified distance from a location. Results can be filtered by education level
-    (elementary, middle, high school, university, etc.). Essential for families evaluating
-    neighborhoods or real estate purchases with education considerations.
-
-    Args:
-        latitude: Center point latitude (decimal degrees)
-        longitude: Center point longitude (decimal degrees)
-        radius: Search radius in meters (defaults to 2000m/2km)
-        education_levels: Optional list of specific education levels to filter by
-                        (e.g., ["elementary", "secondary", "university"])
-        
-    Returns:
-        List of educational institutions with:
-        - Name and type
-        - Distance from search point
-        - Education levels offered
-        - Contact information if available
-        - Other relevant metadata
-    . Input: {"latitude": {"title": "Latitude", "type": "number"}, "longitude": {"title": "Longitude", "type": "number"}, "radius": {"default": 2000, "title": "Radius", "type": "number"}, "education_levels": {"default": null, "items": {"type": "string"}, "title": "Education Levels", "type": "array"}}
-    - find_parking_facilities (server: osm-mcp-server): 
-    Locate parking facilities near a specific location.
-
-    This tool finds parking options (lots, garages, street parking) near a specified location.
-    Results can be filtered by parking type and include capacity information where available.
-    Useful for trip planning, city navigation, and evaluating parking availability in urban areas.
-
-    Args:
-        latitude: Center point latitude (decimal degrees)
-        longitude: Center point longitude (decimal degrees)
-        radius: Search radius in meters (defaults to 1000m/1km)
-        parking_type: Optional filter for specific types of parking facilities
-                    ("surface", "underground", "multi-storey", etc.)
-        
-    Returns:
-        List of parking facilities with:
-        - Name and type
-        - Capacity information if available
-        - Fee structure if available
-        - Access restrictions
-        - Distance from search point
-    . Input: {"latitude": {"title": "Latitude", "type": "number"}, "longitude": {"title": "Longitude", "type": "number"}, "radius": {"default": 1000, "title": "Radius", "type": "number"}, "parking_type": {"default": null, "title": "Parking Type", "type": "string"}}
-    - find_nearby_places (server: osm-mcp-server): 
-    Discover points of interest and amenities near a specific location.
-
-    This tool performs a comprehensive search around a geographic point to identify
-    nearby establishments, amenities, and points of interest. Results are organized by
-    category and subcategory, making it easy to find specific types of places. Essential
-    for location-based recommendations, neighborhood analysis, and proximity-based decision making.
-
-    Args:
-        latitude: Center point latitude (decimal degrees)
-        longitude: Center point longitude (decimal degrees)
-        radius: Search radius in meters (defaults to 1000m/1km)
-        categories: List of OSM categories to search for (e.g., ["amenity", "shop", "tourism"]).
-                If omitted, searches common categories.
-        limit: Maximum number of total results to return
-        
-    Returns:
-        Structured dictionary containing:
-        - Original query parameters
-        - Total count of places found
-        - Results grouped by category and subcategory
-        - Each place includes name, coordinates, and associated tags
-    . Input: {"latitude": {"title": "Latitude", "type": "number"}, "longitude": {"title": "Longitude", "type": "number"}, "radius": {"default": 1000, "title": "Radius", "type": "number"}, "categories": {"default": null, "items": {"type": "string"}, "title": "Categories", "type": "array"}, "limit": {"default": 20, "title": "Limit", "type": "integer"}}
-    - geocode_address (server: osm-mcp-server): 
-    Convert an address or place name to geographic coordinates with detailed location information.
-
-    This tool takes a text description of a location (such as an address, landmark name, or
-    place of interest) and returns its precise geographic coordinates along with rich metadata.
-    The results can be used for mapping, navigation, location-based analysis, and as input to
-    other geospatial tools.
-
-    Args:
-        address: The address, place name, landmark, or description to geocode (e.g., "Empire State Building", 
-                "123 Main St, Springfield", "Golden Gate Park, San Francisco")
-        
-    Returns:
-        List of matching locations with:
-        - Geographic coordinates (latitude/longitude)
-        - Formatted address
-        - Administrative boundaries (city, state, country)
-        - OSM type and ID
-        - Bounding box (if applicable)
-        - Importance ranking
-    . Input: {"address": {"title": "Address", "type": "string"}}
-
-
-    Example:
-
-    Tool:
-    get_weather
-    - description: get weather information
-    - arguments:
-    - city (string): city name
-    - date (string, optional): date
-    
-    User: What's the weather in Beijing?
-
-    Assistant:
-    I need to call the get_weather tool to know the weather in Beijing.
-    {
-    "name": "get_weather",
-    "arguments": {
-        "city": "Beijing"
-    }
-    }
+    [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant to make travel plans for Bob.\n\nEXTERNAL RESOURCES:\n1. A database containing information about train tickets, attractions, and city transportation.\n2. A python notebook to execute python code for numerical operations and planning. \n\nTASK DESCRIPTION\nYou need to make a travel plan based on the given requirements, taking into account transportation between cities and daily schedules.\nThe final travel plan may include or be part of the following:\n1.go_to_place(origin:str,destination:str,departure_time,arrival_time): go to destination from origin. The origin and destination should be the name of a hotel or a spot instead of a city.\n2.visit(place:str,begin_time,end_time): visit somewhere from begin_time to end_time. The time should be expressed as \"%Y-%m-%d %H:%M\", e.g. 2023-07-02 16:00. You have to go somewhere before you can visit it.\n3.go_to_city(origin_city:str,destination_city:str,departure_time,arrival_time,ticket_number): go to destination city from origin city, using the ticket with the ticket_number(you can know the ticket number from the database).\n4.stay_in(city:str,begin_time,end_time): stay in somewhere from begin_time to end_time. The time should be expressed as \"%Y-%m-%d %H:%M\". Only when Bob is in some city can he visit it.\ne.g. \n<plan>go_to_place(\"Beijing Railway Hotel\",\"The Great Wall\",\"2023-07-02 7:00\",\"2023-07-02 8:05\")</plan>, <plan>visit(\"The Great Wall\",\"2023-07-02 8:05\",\"2023-07-05 17:00\")</plan>,<plan>go_to_city(\"Shanghai\",\"Beijing\",\"2023-07-02 16:00\",\"2023-07-02 22:30\",\"D1111\")</plan>, <plan>stay_in(\"Beijing\",\"2023-07-02 22:30\",\"2023-07-05 8:00\")</plan>\nYour ultimate goal is to give these plans, there is no need to do anything extra.\n\n--- Your Workflow ---\n1. You will first be given a task.\n2. You should understand the task and devise a plan to complete the task. This plan will contain a series of subtasks that need to be completed.\n\nPLAN AND SUBTASK:\nIf the task cannot be easily solved directly or requires the use of external resources, please assign it to another agent to complete (such as \"find the cheapest train from Beijing to Shanghai in 2023-7-1\"), otherwise you can complete it yourself. You may need to wait for results from other agents before proceeding to the next step of the task. If you need help from other agents, please clearly describe the task objectives, background, and precautions of the subtask. \nA subtask-structure has the following json component and surrounded with <subtask></subtask> as follows:\n<subtask>{\n\"subtask_name\": string, name of the subtask\n\"goal\": string, the main purpose of the subtask, and what will you do to reach this goal?\n\"criticism\": string, what potential problems may the current subtask and goal have?\n\"milestones\": list[string]. what milestones should be achieved to ensure the subtask is done? Make it detailed and specific.\n\"result_format\": optional, what the result should be.}</subtask>\n\n"
+      },
+      {
+        "role": "system",
+        "name": "example_user",
+        "content": "Task Requirements: Bob is in Shanghai and going to travel in several cities, please make a ticket purchase plan and travel sequence for him.The demands are as follows:\n1. visit ['Beijing']. The order doesn't matter and he needs to return to Shanghai finally.\n2. He is free to travel from 2023.7.1 to 2023.7.20. The budget for transportation is 1000.0 CNY.\n3. Play at least 3 days in Beijing.\n4. If you arrive in a city before 12:00 noon, that day can be counted as a day of play. If it's past 12 o'clock, it doesn't count as a day.\n5. On the basis of completing the above conditions (especially the budget), spend as little time as possible.\n"
+      },
+      {
+        "role": "system",
+        "name": "example_assistant",
+        "content": "Based on the requirements, we can know that Bob need to go to Beijing from Shanghai, stay in Beijing for 3 days and then go to Shanghai from Beijing.\nGiven the task, the first step is to find available train tickets that fit Bob's schedule and budget.\n<subtask>\n{\n\"subtask_name\": \"find_available_train_tickets\",\n\"goal\": \"Find train tickets from Shanghai to Beijing and back to Shanghai that fit within the travel dates, budget, and allow for at least 3 full days of play in Beijing. If the arrival is before 12:00 noon, it counts as a day of play.\",\n\"criticism\": \"Must ensure that the total cost of the round trip tickets does not exceed the budget of 1000.0 CNY and that the timings allow for at least 3 full days in Beijing for visit. So you need to allow time between train rides(arrival in a city and departure from the city). For each ticket, you must give me the ticket number, origin, destination, departure time, arrival time and the price.\",\n\"milestones\": [\"Identify a suitable train from Shanghai to Beijing.\", \"Identify a return train from Beijing to Shanghai ensuring at least 3 days in Beijing before departing.\", \"Ensure the total cost of both tickets is within the budget of 1000.0 CNY.\"]\n}\n</subtask>\nThen we can get the final plan consists of go_to_city and stay_in.\n<subtask>\n{\n\"subtask_name\": \"get the final plan\",\n\"goal\": \"Formulate a travel plan for Bob's trip from Shanghai to Beijing and back, ensuring it fits within his budget and time constraints, including at least 3 full days in Beijing.\",\n\"criticism\": \"The plan must be concise, focusing on efficient travel and stay arrangements while adhering to the budget and time constraints.\",\n\"milestones\": [\"Include suitable train journeys within the budget.\",\"Plan at least 3 full days in Beijing.\",\"Ensure the overall plan fits within the specified dates and budget.\"],\n\"result_format\": \"A schedule consisting with multiple <plan>go_to_place(...)</plan> and <plan>visit(...)</plan>.    1.go_to_place(origin:str,destination:str,departure_time,arrival_time): go to destination from origin.     2.visit(place:str,begin_time,end_time): visit somewhere from begin_time to end_time. The time should be expressed as %Y-%m-%d %H:%M, e.g. 2023-07-02 16:00.\"\n}\n</subtask>\n"
+      },
+      {
+        "role": "user",
+        "content": "Task Requirements:\nBob is in Guangzhou and going to travel in several cities, please make a ticket purchase plan and travel sequence for him.The demands are as follows:\n1. visit ['Beijing', 'Chengdu']. The order doesn't matter and he needs to return to Guangzhou finally.\n2. 10 days (2023-07-04 00:00 ~ 2023-07-14 00:00) for this trip.\n3. Play at least 3 days in Beijing, 3 days in Chengdu.\n4. Stay in any city for a minimum of 24 hours to count as one day.\n5. On the basis of completing the above conditions (especially the time limit), spend as little money as possible.\nCome up with an abstract plan to perform this task in a couple of steps. Give me the subtasks between <subtask> and </subtask>."
+      }
+    ]
     '''
 
     # Add special tokens for the Instruct model. The Base model does not require the following two lines.
@@ -403,7 +214,7 @@ def main():
     input_ids = encoded_outputs['input_ids'].to(device)
     attention_mask = encoded_outputs['attention_mask'].to(device)
 
-    out = generate(model, input_ids, attention_mask, steps=128, gen_length=128, block_length=32, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log_128_128_128.txt")
+    out = generate(model, input_ids, attention_mask, steps=128, gen_length=512, block_length=512, temperature=0., cfg_scale=0., remasking='low_confidence',save_intermediate=True, tokenizer=tokenizer, output_file="denoise_log_128_128_128.txt")
     output = tokenizer.batch_decode(out[:, input_ids.shape[1]:], skip_special_tokens=True)
     for o in output:
         print(o)

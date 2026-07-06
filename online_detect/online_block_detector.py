@@ -241,6 +241,60 @@ def spans_to_boundaries(spans: Sequence[Tuple[int, int]], seq_len: int) -> List[
     return [int(end) for _, end in spans[:-1] if 0 < int(end) < int(seq_len)]
 
 
+def snap_structural_boundaries(
+    boundaries: Sequence[int],
+    token_texts: Sequence[str],
+) -> List[int]:
+    if not boundaries:
+        return []
+
+    text, offsets = _token_char_offsets(token_texts)
+    seq_len = len(token_texts)
+    if not text or not offsets:
+        return sorted(set(int(b) for b in boundaries if 0 < int(b) < seq_len))
+
+    tag_spans: List[Tuple[int, int, str]] = []
+    for tag in (
+        "<subtask>",
+        "</subtask>",
+        "<tool_call>",
+        "</tool_call>",
+        "<agent_call>",
+        "</agent_call>",
+        "<TOOL_CALL>",
+        "</TOOL_CALL>",
+        "<AGENT_CALL>",
+        "</AGENT_CALL>",
+    ):
+        search_from = 0
+        while True:
+            start = text.find(tag, search_from)
+            if start < 0:
+                break
+            tag_spans.append((start, start + len(tag), tag))
+            search_from = start + len(tag)
+
+    snapped: List[int] = []
+    for boundary in boundaries:
+        boundary = int(boundary)
+        if not 0 < boundary < seq_len:
+            continue
+        char_pos = offsets[boundary - 1][1]
+        new_boundary = boundary
+        for start, end, tag in tag_spans:
+            if start < char_pos < end:
+                # Closing tags belong to the block on the left; opening tags
+                # belong to the block on the right.
+                if tag.startswith("</"):
+                    new_boundary = _char_to_token_boundary(offsets, end, "right")
+                else:
+                    new_boundary = _char_to_token_boundary(offsets, start, "left")
+                break
+        if 0 < new_boundary < seq_len:
+            snapped.append(int(new_boundary))
+    return sorted(set(snapped))
+
+
 def build_line_units(token_texts: Sequence[str]) -> List[List[int]]:
     units: List[List[int]] = []
     cur: List[int] = []
@@ -735,6 +789,21 @@ class OnlineBlockDetector:
                 min_score=self.min_boundary_score,
             )
 
+        score_map = {int(b): float(s) for b, s in zip(boundaries, scores)}
+        score_map.update({int(b): float(s) for b, s in line_debug})
+        selected_before_snap = list(selected)
+        selected = snap_structural_boundaries(selected, source.token_texts)
+        for snapped_boundary in selected:
+            if int(snapped_boundary) in score_map:
+                continue
+            nearby_scores = [
+                score_map[int(old_boundary)]
+                for old_boundary in selected_before_snap
+                if int(old_boundary) in score_map and abs(int(old_boundary) - int(snapped_boundary)) <= 8
+            ]
+            if nearby_scores:
+                score_map[int(snapped_boundary)] = float(max(nearby_scores))
+
         if self._last_boundaries is not None and boundaries_close(
             selected, self._last_boundaries, self.boundary_tolerance
         ):
@@ -743,12 +812,92 @@ class OnlineBlockDetector:
             self._stable_count = 1
         self._last_boundaries = list(selected)
 
-        score_map = {int(b): float(s) for b, s in zip(boundaries, scores)}
-        score_map.update({int(b): float(s) for b, s in line_debug})
         spans = self._build_spans(selected, confidence, source.token_texts)
         frozen = bool(freeze_when_stable and self._stable_count >= self.stable_rounds and len(spans) > 1)
         result = DetectionResult(
             step_idx=int(source.step_idx),
+            frozen=frozen,
+            boundaries=list(selected),
+            boundary_scores=[(int(boundary), float(score_map.get(int(boundary), 0.0))) for boundary in selected],
+            spans=spans,
+        )
+        if frozen:
+            self._frozen_result = result
+        return result
+
+    def detect_from_boundary_scores(
+        self,
+        step_idx: int,
+        token_texts: Sequence[str],
+        confidence: np.ndarray,
+        mask: np.ndarray,
+        boundary_scores: Sequence[Tuple[int, float]],
+        freeze_when_stable: bool = True,
+    ) -> DetectionResult:
+        if self._frozen_result is not None:
+            return self._frozen_result
+
+        seq_len = len(token_texts)
+        keep_mask = np.asarray(
+            [_keep_token(token, bool(masked)) for token, masked in zip(token_texts, mask)],
+            dtype=bool,
+        )
+        score_map = {int(boundary): float(score) for boundary, score in boundary_scores}
+        selected = choose_boundaries(
+            boundaries=np.asarray(list(score_map.keys()), dtype=np.int64),
+            scores=np.asarray(list(score_map.values()), dtype=np.float64),
+            keep_mask=keep_mask,
+            top_k=self.detect_top_k,
+            min_span_tokens=self.min_span_tokens,
+            min_score=self.min_boundary_score,
+        )
+
+        structural_spans = (
+            find_structural_spans(
+                token_texts,
+                allow_partial_structures=self.allow_partial_structures,
+            )
+            if self.prefer_structural_spans and not selected
+            else []
+        )
+        if structural_spans:
+            selected = spans_to_boundaries(structural_spans, seq_len)
+        elif not selected and score_map:
+            ranked = sorted(score_map, key=score_map.get, reverse=True)
+            selected = choose_boundaries(
+                boundaries=np.asarray(ranked, dtype=np.int64),
+                scores=np.asarray([score_map[b] for b in ranked], dtype=np.float64),
+                keep_mask=keep_mask,
+                top_k=self.detect_top_k,
+                min_span_tokens=self.min_span_tokens,
+                min_score=-float("inf"),
+            )
+
+        selected_before_snap = list(selected)
+        selected = snap_structural_boundaries(selected, token_texts)
+        for snapped_boundary in selected:
+            if int(snapped_boundary) in score_map:
+                continue
+            nearby_scores = [
+                score_map[int(old_boundary)]
+                for old_boundary in selected_before_snap
+                if int(old_boundary) in score_map and abs(int(old_boundary) - int(snapped_boundary)) <= 8
+            ]
+            if nearby_scores:
+                score_map[int(snapped_boundary)] = float(max(nearby_scores))
+
+        if self._last_boundaries is not None and boundaries_close(
+            selected, self._last_boundaries, self.boundary_tolerance
+        ):
+            self._stable_count += 1
+        else:
+            self._stable_count = 1
+        self._last_boundaries = list(selected)
+
+        spans = self._build_spans(selected, confidence, token_texts)
+        frozen = bool(freeze_when_stable and self._stable_count >= self.stable_rounds and len(spans) > 1)
+        result = DetectionResult(
+            step_idx=int(step_idx),
             frozen=frozen,
             boundaries=list(selected),
             boundary_scores=[(int(boundary), float(score_map.get(int(boundary), 0.0))) for boundary in selected],

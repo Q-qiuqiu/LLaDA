@@ -4,7 +4,7 @@ This directory is an independent development copy for online detection experimen
 
 ## Files
 
-- `generate_blockwise.py`: online generation entry. It records step attention/confidence/token drafts, detects response blocks during denoising, freezes stable boundaries, then switches transfer selection from global top-k to per-block top-k.
+- `generate_blockwise.py`: online generation entry. It records step attention/confidence/token drafts, detects response blocks during denoising, freezes stable boundaries, then can switch to batched per-block decoding.
 - `online_block_detector.py`: xlsx-free detector. It accepts in-memory `StepSnapshot` objects and returns `DetectionResult`.
 - `agent_prefetch.py`: lightweight parser/state machine for early agent/tool name prefetch events.
 - `*_reference.py`: copied reference files from `yzx_test` for comparison. They are not imported by the new online path.
@@ -33,7 +33,7 @@ python online_detect/generate_blockwise.py \
   --output-file online_detect/online_detect_log.txt
 ```
 
-The implementation currently keeps one full-sequence model forward per denoising step. The parallelism experiment is in the transfer schedule: after stable block detection, every detected block receives its own token transfer budget in the same step. This is the low-risk stage before splitting spans into separate batched forwards.
+With `parallel_block_decode=True`, the implementation uses scheme A after freezing: it copies the full sequence once per detected block, runs one batched model forward, lets each batch item update only its own block span, then merges those selected tokens back into the main sequence. Use `--no-parallel-block-decode` to fall back to the older single-forward block-wise transfer schedule.
 
 ## Log Contents
 
