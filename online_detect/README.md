@@ -33,7 +33,7 @@ python online_detect/generate_blockwise.py \
   --output-file online_detect/online_detect_log.txt
 ```
 
-With `parallel_block_decode=True`, the implementation uses scheme A after freezing: it copies the full sequence once per detected block, runs one batched model forward, lets each batch item update only its own block span, then merges those selected tokens back into the main sequence. Use `--no-parallel-block-decode` to fall back to the older single-forward block-wise transfer schedule.
+With `parallel_block_decode=True`, the implementation uses scheme A after freezing: it copies the full sequence once per detected block, runs one batched model forward, lets each batch item update only its own block span, then merges those selected tokens back into the main sequence. Use `--no-parallel-block-decode` to fall back to the older single-forward block-wise transfer schedule. With `agent_name_priority_decode=True`, blocks whose agent/subtask/tool name has not been parsed yet spend their transfer budget on the detected name field or the block prefix before normal block-wise decoding resumes.
 
 ## Log Contents
 

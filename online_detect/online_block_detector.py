@@ -103,18 +103,68 @@ def _structure_bonus(tokens: Sequence[str], boundary: int, context_tokens: int =
     return bonus
 
 
+def _json_state(text: str) -> Tuple[int, int, bool]:
+    brace_depth = 0
+    bracket_depth = 0
+    in_string = False
+    escape = False
+    for ch in text:
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            brace_depth += 1
+        elif ch == "}":
+            brace_depth = max(0, brace_depth - 1)
+        elif ch == "[":
+            bracket_depth += 1
+        elif ch == "]":
+            bracket_depth = max(0, bracket_depth - 1)
+    return brace_depth, bracket_depth, in_string
+
+
+def _starts_new_structure(text: str) -> bool:
+    stripped = text.lstrip()
+    compact = re.sub(r"\s+", "", stripped.lower())
+    if not stripped:
+        return False
+    if compact.startswith(("<subtask>", "<tool_call>", "<agent_call>", "<tool>", "<agent>")):
+        return True
+    if re.match(r'\{?\s*"?(?:subtask_name|agent_name|tool_name|name)"?\s*:', stripped):
+        return True
+    if stripped.startswith("{") and re.search(
+        r'^\{\s*"?(?:subtask_name|agent_name|tool_name|name)"?\s*:',
+        stripped,
+    ):
+        return True
+    return False
+
+
 def _json_fragment_penalty(tokens: Sequence[str], boundary: int, context_tokens: int = 14) -> float:
     left_start = max(0, boundary - context_tokens)
     right_end = min(len(tokens), boundary + context_tokens)
     left_text = "".join(_clean_token(token) for token in tokens[left_start:boundary])
     right_text = "".join(_clean_token(token) for token in tokens[boundary:right_end])
     near_text = left_text + right_text
+    right_stripped = right_text.lstrip()
+    right_compact = re.sub(r"\s+", "", right_stripped.lower())
 
     # Avoid cutting inside values/lists of the same JSON-ish object unless a
     # clear new block/tag starts on the right.
-    if re.search(r"<?/?(?:sub|tool|agent)", re.sub(r"\s+", "", right_text.lower())):
+    if re.match(r"<?/?(?:sub|tool|agent)", right_compact):
         return 0.0
     penalty = 0.0
+    full_left_text = "".join(_clean_token(token) for token in tokens[:boundary])
+    brace_depth, bracket_depth, in_string = _json_state(full_left_text)
+    if (in_string or brace_depth > 0 or bracket_depth > 0) and not _starts_new_structure(right_text):
+        penalty += 50.0
     if left_text.count('"') % 2 == 1 or right_text.count('"') % 2 == 1:
         penalty += 0.5
     if left_text.rstrip().endswith((",", ":")):

@@ -2,6 +2,7 @@ import argparse
 import json
 import math
 import os
+import re
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -82,7 +83,7 @@ CONFIG = {
     # line_unit 模式强制输出多少个 block；0 表示自动选择。
     "line_unit_force_blocks": 0,
     # line_unit 模式每个 block 至少包含多少个 unit。
-    "line_unit_min_block_units": 2,
+    "line_unit_min_block_units": 4,
     # line_unit 模式的最小边界分数。
     "line_unit_min_score": 0.0,
     # 每次检测最多选择多少个边界；最终 block 数最多约为 detector_top_k + 1。
@@ -107,6 +108,10 @@ CONFIG = {
     "output_file": "online_detect_log.txt",
     # freeze 后是否使用方案 A：复制完整上下文为 block batch，一次 forward 并行推进多个 block。
     "parallel_block_decode": True,
+    # freeze 后是否优先解码尚未识别 agent/subtask/tool name 的 block 内 name 字段。
+    "agent_name_priority_decode": True,
+    # 找不到明确 name 字段时，每个未识别 block 优先推进开头多少个 token。
+    "agent_name_priority_window": 48,
 }
 
 
@@ -148,6 +153,49 @@ def ceil_transfer_count(remaining: int, steps_left: int) -> int:
     if steps_left <= 0:
         return remaining
     return max(1, (int(remaining) + int(steps_left) - 1) // int(steps_left))
+
+
+def token_char_offsets(token_texts: Sequence[str]) -> Tuple[str, List[Tuple[int, int]]]:
+    parts: List[str] = []
+    offsets: List[Tuple[int, int]] = []
+    cursor = 0
+    for text in token_texts:
+        start = cursor
+        cursor += len(text)
+        offsets.append((start, cursor))
+        parts.append(text)
+    return "".join(parts), offsets
+
+
+def char_span_to_token_indices(
+    offsets: Sequence[Tuple[int, int]],
+    start_char: int,
+    end_char: int,
+) -> List[int]:
+    return [
+        idx
+        for idx, (start, end) in enumerate(offsets)
+        if end > int(start_char) and start < int(end_char)
+    ]
+
+
+def extract_stable_agent_name(text: str) -> Optional[str]:
+    if "<MASK>" not in text:
+        return extract_agent_name(text)
+    patterns = [
+        r'"agent_name"\s*:\s*"([^"]{1,128})"',
+        r'"name"\s*:\s*"([^"]{1,128})"',
+        r'"tool_name"\s*:\s*"([^"]{1,128})"',
+        r'"subtask_name"\s*:\s*"([^"]{1,128})"',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        value = match.group(1).strip()
+        if value and "<MASK>" not in value:
+            return value
+    return None
 
 
 class LastLayerAttentionProbe:
@@ -652,8 +700,8 @@ class LLaDAOnlineBlockwiseGenerator:
                 continue
             token_texts = [self.decode_token(token_id) for token_id in block_ids]
             confidence = np.where(usable, 1.0, 0.0)
-            text = draft_text(token_texts, usable)
-            agent_name = extract_agent_name(text)
+            text = self.decode_with_mask(block_ids)
+            agent_name = extract_stable_agent_name(text)
             if not agent_name:
                 continue
 
@@ -711,6 +759,52 @@ class LLaDAOnlineBlockwiseGenerator:
             )
         return blocks
 
+    def _name_priority_local_indices(
+        self,
+        draft_block_ids: Sequence[int],
+        current_block_ids: Sequence[int],
+        fallback_window: int,
+    ) -> List[int]:
+        masked = [int(token_id) == self.mask_id for token_id in current_block_ids]
+        if not any(masked):
+            return []
+
+        token_texts = [self.decode_token(token_id) for token_id in draft_block_ids]
+        text, offsets = token_char_offsets(token_texts)
+        key_pattern = re.compile(
+            r'"(?:agent_name|tool_name|subtask_name|name)"\s*:\s*"',
+            flags=re.IGNORECASE,
+        )
+        match = key_pattern.search(text)
+        if match:
+            value_start = match.end()
+            close_quote = text.find('"', value_start)
+            if close_quote >= 0:
+                end_char = close_quote + 1
+            else:
+                end_char = min(len(text), value_start + 96)
+            candidate_indices = char_span_to_token_indices(offsets, match.start(), end_char)
+        else:
+            fuzzy_match = re.search(
+                r"(?:agent|tool|subtask|sub|name)[A-Za-z_]{0,16}",
+                text[:512],
+                flags=re.IGNORECASE,
+            )
+            if fuzzy_match:
+                end_char = min(len(text), fuzzy_match.end() + 128)
+                candidate_indices = char_span_to_token_indices(offsets, fuzzy_match.start(), end_char)
+            else:
+                candidate_indices = list(range(min(len(current_block_ids), int(fallback_window))))
+
+        priority = [idx for idx in candidate_indices if 0 <= idx < len(masked) and masked[idx]]
+        if priority:
+            return priority
+        return [
+            idx
+            for idx in range(min(len(current_block_ids), int(fallback_window)))
+            if masked[idx]
+        ]
+
     def _build_x0_and_confidence(
         self,
         logits: torch.Tensor,
@@ -763,10 +857,13 @@ class LLaDAOnlineBlockwiseGenerator:
         remasking: str,
         logits_eos_inf: bool,
         confidence_eos_eot_inf: bool,
+        known_agent_names: Optional[Dict[int, str]] = None,
+        agent_name_priority_decode: bool = True,
+        agent_name_priority_window: int = 96,
     ) -> Tuple[torch.Tensor, int, List[Dict[str, int]]]:
         ranges = self.ranges_from_detection(frozen_detection, gen_length)
-        active_ranges: List[Tuple[int, int]] = []
-        for start, end in ranges:
+        active_ranges: List[Tuple[int, int, int]] = []
+        for span_id, (start, end) in enumerate(ranges):
             abs_start = max(prompt_len + start, block_start)
             abs_end = min(prompt_len + end, block_end)
             if abs_start >= abs_end:
@@ -774,7 +871,7 @@ class LLaDAOnlineBlockwiseGenerator:
             remaining = int((x[:, abs_start:abs_end] == self.mask_id).sum().item())
             if remaining <= 0:
                 continue
-            active_ranges.append((abs_start, abs_end))
+            active_ranges.append((int(span_id), abs_start, abs_end))
 
         transfer_index = torch.zeros_like(x, dtype=torch.bool, device=x.device)
         if not active_ranges:
@@ -795,22 +892,56 @@ class LLaDAOnlineBlockwiseGenerator:
         )
 
         debug: List[Dict[str, int]] = []
-        for batch_idx, (abs_start, abs_end) in enumerate(active_ranges):
+        draft_ids = torch.where(x_batch == self.mask_id, x0, x_batch)
+        known_agent_names = known_agent_names or {}
+        for batch_idx, (span_id, abs_start, abs_end) in enumerate(active_ranges):
             remaining = int((x[:, abs_start:abs_end] == self.mask_id).sum().item())
             k_this_span = ceil_transfer_count(remaining, steps_left)
-            out = safe_topk(confidence[batch_idx, abs_start:abs_end], k_this_span)
-            if out is None:
+            priority_candidates: List[int] = []
+            if agent_name_priority_decode and int(span_id) not in known_agent_names:
+                priority_candidates = self._name_priority_local_indices(
+                    draft_block_ids=draft_ids[batch_idx, abs_start:abs_end].detach().tolist(),
+                    current_block_ids=x[0, abs_start:abs_end].detach().tolist(),
+                    fallback_window=agent_name_priority_window,
+                )
+
+            selected_local_parts: List[torch.Tensor] = []
+            selected_priority_count = 0
+            if priority_candidates:
+                priority_index = torch.tensor(priority_candidates, device=x.device, dtype=torch.long)
+                priority_out = safe_topk(
+                    confidence[batch_idx, abs_start:abs_end].index_select(0, priority_index),
+                    k_this_span,
+                )
+                if priority_out is not None:
+                    _, priority_local_index = priority_out
+                    selected_priority = priority_index.index_select(0, priority_local_index)
+                    selected_local_parts.append(selected_priority)
+                    selected_priority_count = int(selected_priority.numel())
+
+            remaining_budget = k_this_span - selected_priority_count
+            if remaining_budget > 0 and not priority_candidates:
+                out = safe_topk(confidence[batch_idx, abs_start:abs_end], remaining_budget)
+                if out is not None:
+                    _, local_index = out
+                    selected_local_parts.append(local_index)
+
+            if not selected_local_parts:
                 continue
-            _, local_index = out
+            local_index = torch.cat(selected_local_parts, dim=0).unique()
             positions = abs_start + local_index
             transfer_index[0, positions] = True
             x[0, positions] = x0[batch_idx, positions]
             debug.append(
                 {
+                    "span_id": int(span_id),
                     "batch_idx": int(batch_idx),
                     "start": int(abs_start - prompt_len),
                     "end": int(abs_end - prompt_len),
                     "selected": int(local_index.numel()),
+                    "name_priority_candidates": int(len(priority_candidates)),
+                    "name_priority_selected": int(selected_priority_count),
+                    "name_known": bool(int(span_id) in known_agent_names),
                 }
             )
         return transfer_index, int(transfer_index.sum().item()), debug
@@ -861,6 +992,8 @@ class LLaDAOnlineBlockwiseGenerator:
         save_intermediate: bool = False,
         output_file: str = "online_detect_log.txt",
         parallel_block_decode: bool = True,
+        agent_name_priority_decode: bool = True,
+        agent_name_priority_window: int = 96,
     ) -> Dict[str, object]:
         prompt_len = int(prompt.shape[1])
         x = torch.full(
@@ -902,7 +1035,9 @@ class LLaDAOnlineBlockwiseGenerator:
                     f"steps={steps}, gen_length={gen_length}, block_length={block_length}, "
                     f"detect_start_step={detect_start_step}, detect_interval={detect_interval}, "
                     f"detection_mode={detector.detection_mode}, history_size={detector.history_size}, "
-                    f"parallel_block_decode={parallel_block_decode}\n"
+                    f"parallel_block_decode={parallel_block_decode}, "
+                    f"agent_name_priority_decode={agent_name_priority_decode}, "
+                    f"agent_name_priority_window={agent_name_priority_window}\n"
                 )
                 f.write("=" * 80 + "\n")
                 f.write("This log records detection rounds, agent-name parse attempts, and only the final blockwise decode sequence.\n")
@@ -936,6 +1071,9 @@ class LLaDAOnlineBlockwiseGenerator:
                         remasking=remasking,
                         logits_eos_inf=logits_eos_inf,
                         confidence_eos_eot_inf=confidence_eos_eot_inf,
+                        known_agent_names=known_agent_names,
+                        agent_name_priority_decode=agent_name_priority_decode,
+                        agent_name_priority_window=agent_name_priority_window,
                     )
                     response_ids = x[0, prompt_len:].detach().tolist()
                     last_blockwise_decode = {
@@ -1224,6 +1362,8 @@ class LLaDAOnlineBlockwiseGenerator:
                         "frozen_agent_parse_rounds": len(frozen_agent_parse_log),
                         "prefetch_events": len(prefetch_log),
                         "final_mask_cleanup_count": int(final_mask_cleanup_count),
+                        "agent_name_priority_decode": bool(agent_name_priority_decode),
+                        "agent_name_priority_window": int(agent_name_priority_window),
                         "frozen_boundaries": [] if frozen_detection is None else frozen_detection.boundaries,
                         "last_blockwise_decode_mode": (
                             None if last_blockwise_decode is None else last_blockwise_decode.get("mode")
@@ -1291,12 +1431,16 @@ def main() -> None:
     parser.add_argument("--output-file", type=str, default=CONFIG["output_file"])
     parser.add_argument("--parallel-block-decode", action="store_true")
     parser.add_argument("--no-parallel-block-decode", action="store_false", dest="parallel_block_decode")
+    parser.add_argument("--agent-name-priority-decode", action="store_true")
+    parser.add_argument("--no-agent-name-priority-decode", action="store_false", dest="agent_name_priority_decode")
+    parser.add_argument("--agent-name-priority-window", type=int, default=CONFIG["agent_name_priority_window"])
     parser.set_defaults(
         use_chat_template=CONFIG["use_chat_template"],
         save_intermediate=CONFIG["save_intermediate"],
         prefer_structural_spans=CONFIG["prefer_structural_spans"],
         allow_partial_structures=CONFIG["allow_partial_structures"],
         parallel_block_decode=CONFIG["parallel_block_decode"],
+        agent_name_priority_decode=CONFIG["agent_name_priority_decode"],
     )
     args = parser.parse_args()
 
@@ -1344,6 +1488,8 @@ def main() -> None:
         save_intermediate=args.save_intermediate,
         output_file=args.output_file,
         parallel_block_decode=args.parallel_block_decode,
+        agent_name_priority_decode=args.agent_name_priority_decode,
+        agent_name_priority_window=args.agent_name_priority_window,
     )
     print(f"Frozen boundaries: {result['frozen_boundaries']}")
     print(f"Detection rounds: {len(result['detection_log'])}")
