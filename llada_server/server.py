@@ -86,6 +86,14 @@ async def create_chat_completion(request: ChatCompletionRequest):
             temperature=request.temperature,
             cfg_scale=request.cfg_scale,
             remasking=request.remasking,
+            detect_start_step=request.detect_start_step,
+            detect_interval=request.detect_interval,
+            detector_history_size=request.detector_history_size,
+            detection_mode=request.detection_mode,
+            parallel_block_decode=request.parallel_block_decode,
+            agent_name_priority_decode=request.agent_name_priority_decode,
+            agent_name_priority_window=request.agent_name_priority_window,
+            request_id=request_id,
         )
 
     created = int(time.time())
@@ -155,6 +163,14 @@ async def create_completion(request: CompletionRequest):
                 temperature=request.temperature,
                 cfg_scale=request.cfg_scale,
                 remasking=request.remasking,
+                detect_start_step=request.detect_start_step,
+                detect_interval=request.detect_interval,
+                detector_history_size=request.detector_history_size,
+                detection_mode=request.detection_mode,
+                parallel_block_decode=request.parallel_block_decode,
+                agent_name_priority_decode=request.agent_name_priority_decode,
+                agent_name_priority_window=request.agent_name_priority_window,
+                request_id=request_id,
             )
             prompt_tokens += result.prompt_tokens
             completion_tokens += result.completion_tokens

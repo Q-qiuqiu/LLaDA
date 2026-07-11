@@ -30,7 +30,14 @@ export LLADA_DTYPE=bfloat16
 export LLADA_STEPS=128
 export LLADA_GEN_LENGTH=128
 export LLADA_BLOCK_LENGTH=32
+export LLADA_DETECT_START_STEP=56
+export LLADA_DETECTION_MODE=line_unit
+export LLADA_PARALLEL_BLOCK_DECODE=true
 ```
+
+The server uses `online_detect.generate_blockwise` by default. Agent/tool
+prefetch events are printed to stdout only; no external prefetch action is
+performed by `llada_server`.
 
 ## Chat Completions
 
@@ -57,10 +64,14 @@ response = client.chat.completions.create(
     model="llada",
     messages=[{"role": "user", "content": "写一个快速排序"}],
     max_tokens=128,
-    extra_body={"steps": 128, "block_length": 32},
+    extra_body={
+        "steps": 128,
+        "block_length": 32,
+        "detect_start_step": 56,
+        "detection_mode": "line_unit",
+    },
 )
 print(response.choices[0].message.content)
 ```
 
 Streaming, tool calls, logprobs, and multiple choices with `n > 1` are not implemented.
-

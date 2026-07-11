@@ -20,6 +20,13 @@ class ChatCompletionRequest(BaseModel):
     block_length: Optional[int] = None
     cfg_scale: Optional[float] = None
     remasking: Optional[str] = None
+    detect_start_step: Optional[int] = None
+    detect_interval: Optional[int] = None
+    detector_history_size: Optional[int] = None
+    detection_mode: Optional[str] = None
+    parallel_block_decode: Optional[bool] = None
+    agent_name_priority_decode: Optional[bool] = None
+    agent_name_priority_window: Optional[int] = None
     stop: Optional[Union[str, List[str]]] = None
     user: Optional[str] = None
 
@@ -39,6 +46,13 @@ class CompletionRequest(BaseModel):
     block_length: Optional[int] = None
     cfg_scale: Optional[float] = None
     remasking: Optional[str] = None
+    detect_start_step: Optional[int] = None
+    detect_interval: Optional[int] = None
+    detector_history_size: Optional[int] = None
+    detection_mode: Optional[str] = None
+    parallel_block_decode: Optional[bool] = None
+    agent_name_priority_decode: Optional[bool] = None
+    agent_name_priority_window: Optional[int] = None
     stop: Optional[Union[str, List[str]]] = None
     user: Optional[str] = None
 

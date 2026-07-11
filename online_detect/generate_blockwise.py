@@ -365,12 +365,12 @@ class LastLayerAttentionProbe:
 
 
 class LLaDAOnlineBlockwiseGenerator:
-    def __init__(self, model_path: str, device: str = "cuda"):
+    def __init__(self, model_path: str, device: str = "cuda", torch_dtype=torch.bfloat16):
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         self.model = AutoModel.from_pretrained(
             model_path,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch_dtype,
             trust_remote_code=True,
         ).to(device).eval()
 
